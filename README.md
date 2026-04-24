@@ -1,8 +1,30 @@
-# llm-router
+# router
 
 A local proxy that speaks the OpenAI and Anthropic APIs and routes every request to the best available model via a deterministic expert system — no random sampling, no LLM-in-the-loop, no surprises.
 
 **Backends**: [OpenRouter](https://openrouter.ai/) (cloud, ~300 models) and [oMLX](https://omlx.ai/) (local Apple Silicon inference).
+
+## Get started
+
+```bash
+git clone https://github.com/deponere/router.git
+cd router
+cp .env.example .env          # set OPENROUTER_API_KEY
+cargo run -p router-api --release
+```
+
+Then point any OpenAI or Anthropic client at `http://127.0.0.1:4000`. See [Quick start](#quick-start) for a full request example.
+
+## Learn more
+
+- [How it works](#how-it-works) — the expert-system pipeline in four phases
+- [Profiles](#profiles) — the six built-in routing profiles and their weights
+- [Configuration](#configuration) — `config/router.toml` reference
+- [CHANGELOG](./CHANGELOG.md) — release notes
+
+## Reporting bugs
+
+Open an issue on [github.com/deponere/router/issues](https://github.com/deponere/router/issues) with the request payload, the `x-route-profile` you used, and the log output from `RUST_LOG=router_core=debug`.
 
 ---
 
