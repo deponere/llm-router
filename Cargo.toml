@@ -1,0 +1,47 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/router-config",
+    "crates/router-core",
+    "crates/router-providers",
+    "crates/router-api",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+router-config = { path = "crates/router-config" }
+router-core = { path = "crates/router-core" }
+router-providers = { path = "crates/router-providers" }
+
+axum = { version = "0.7", features = ["macros", "http2"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+async-trait = "0.1"
+futures = "0.3"
+tokio-stream = "0.1"
+bytes = "1"
+parking_lot = "0.12"
+moka = { version = "0.12", features = ["future"] }
+uuid = { version = "1", features = ["v4"] }
+dotenvy = "0.15"
+tiktoken-rs = "0.7"
+eventsource-stream = "0.2"
+pin-project-lite = "0.2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

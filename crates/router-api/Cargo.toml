@@ -1,0 +1,35 @@
+[package]
+name = "router-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "router"
+path = "src/main.rs"
+
+[dependencies]
+router-config = { workspace = true }
+router-core = { workspace = true }
+router-providers = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+futures = { workspace = true }
+tokio-stream = { workspace = true }
+bytes = { workspace = true }
+dotenvy = { workspace = true }
+uuid = { workspace = true }
+reqwest = { workspace = true }
+parking_lot = { workspace = true }
+
+[dev-dependencies]
+wiremock = "0.6"
