@@ -57,7 +57,7 @@ zdr = ["anthropic", "openai", "google"]
 # Der Score-Term `quality` greift in jedem Profil mit weights.quality > 0.
 # Übersicht: GET /v1/intelligence
 [registry.intelligence]
-enabled = false
+enabled = true
 api_key_env = "AA_API_KEY"
 base_url = "https://artificialanalysis.ai/api/v2"
 ttl_seconds = 86400

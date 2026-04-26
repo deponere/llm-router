@@ -78,13 +78,14 @@ impl ArtificialAnalysisClient {
 
     /// Liefert den AA-Slug für eine Router-Modell-ID. Reihenfolge:
     /// 1. expliziter Eintrag in `registry.intelligence.aliases`
-    /// 2. Suffix-Match nach dem letzten `/` (OpenRouter-Format)
-    /// 3. Heuristik: lowercase, Punkt -> Bindestrich
+    /// 2. Suffix nach dem letzten `/` (OpenRouter-Format), `:free` u. ä.
+    ///    Tag-Suffixe abgestrippt, lowercase, Punkt -> Bindestrich
     pub fn aa_slug_for(&self, router_id: &str) -> String {
         if let Some(alias) = self.aliases.get(router_id) {
             return alias.to_lowercase();
         }
         let tail = router_id.rsplit('/').next().unwrap_or(router_id);
+        let tail = tail.split(':').next().unwrap_or(tail);
         tail.to_lowercase().replace('.', "-")
     }
 
@@ -143,7 +144,8 @@ impl ArtificialAnalysisClient {
 
         let mut out = HashMap::with_capacity(parsed.data.len());
         for m in parsed.data {
-            let slug = m.id.to_lowercase();
+            // AA's `id` ist eine UUID; der menschenlesbare Slug steht in `slug`.
+            let slug = m.slug.unwrap_or(m.id).to_lowercase();
             let evals = m.evaluations.unwrap_or_default();
             let scores = AaScores {
                 intelligence_index: evals.artificial_analysis_intelligence_index,
@@ -167,6 +169,8 @@ struct ApiResponse {
 #[derive(Debug, Deserialize)]
 struct ApiModel {
     id: String,
+    #[serde(default)]
+    slug: Option<String>,
     #[serde(default)]
     evaluations: Option<ApiEvaluations>,
     #[serde(default)]
