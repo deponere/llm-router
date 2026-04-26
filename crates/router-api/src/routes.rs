@@ -11,6 +11,7 @@ pub fn build(state: AppState) -> Router {
     Router::new()
         .route("/v1/models", get(crate::openai::list_models))
         .route("/v1/registry", get(crate::debug::registry))
+        .route("/v1/intelligence", get(crate::debug::intelligence))
         .route("/v1/transactions", get(crate::debug::transactions))
         .route("/v1/explain", post(crate::debug::explain))
         .route(

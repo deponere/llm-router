@@ -52,6 +52,22 @@ caps = []
 local = []
 zdr = ["anthropic", "openai", "google"]
 
+# Artificial-Analysis-Anbindung. Wenn enabled = true und AA_API_KEY gesetzt,
+# wird der Intelligence-Index pro Modell gezogen (Cache 24h, max 1000 Calls/Tag).
+# Der Score-Term `quality` greift in jedem Profil mit weights.quality > 0.
+# Übersicht: GET /v1/intelligence
+[registry.intelligence]
+enabled = false
+api_key_env = "AA_API_KEY"
+base_url = "https://artificialanalysis.ai/api/v2"
+ttl_seconds = 86400
+
+# Optionales Mapping Router-Modell-ID -> AA-Slug. Vorrang vor der Heuristik
+# (Suffix nach `/`, lowercase, Punkt -> Bindestrich).
+# [registry.intelligence.aliases]
+# "openai/gpt-5.5" = "gpt-5-5"
+# "anthropic/claude-opus-4-7" = "claude-opus-4-7"
+
 # ---------------- Profile ----------------
 
 # Beispiel für ein eigenes Profil mit Modell-Allowlist:
@@ -66,7 +82,7 @@ zdr = ["anthropic", "openai", "google"]
 # Wildcards: * = beliebige Zeichenfolge, Muster gegen die volle model.id
 
 [profiles.default]
-weights = { cost = 0.35, latency = 0.25, context = 0.15, preference = 0.25 }
+weights = { cost = 0.30, latency = 0.20, context = 0.15, preference = 0.20, quality = 0.15 }
 provider_require_parameters = true
 
 [profiles.cheap]
@@ -90,13 +106,16 @@ provider_data_collection = "deny"
 provider_require_parameters = true
 
 [profiles.smart]
-weights = { cost = 0.0, latency = 0.2, context = 0.3, preference = 0.5 }
+weights = { cost = 0.0, latency = 0.10, context = 0.20, preference = 0.20, quality = 0.50 }
 preferences = [
     "anthropic/claude-opus-4-7",
     "anthropic/claude-opus-4-6",
     "openai/gpt-5",
     "google/gemini-2.5-pro",
 ]
+# Hard-Filter: nur Modelle mit AA-Intelligence-Index >= diesem Wert.
+# Greift nur, wenn registry.intelligence.enabled = true und AA-Daten verfügbar sind.
+# min_intelligence_index = 50.0
 provider_require_parameters = true
 # provider_quantizations greift nur fuer Open-Weight-Modelle (Llama, Qwen, ...)
 # und wuerde proprietaere Modelle wie Claude/GPT/Gemini ausfiltern. Wenn du

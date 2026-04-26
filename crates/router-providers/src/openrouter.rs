@@ -301,6 +301,7 @@ fn from_api_model(m: ApiModel) -> ModelCandidate {
         // den Privacy-Overlay aus der Config).
         privacy_class: PrivacyClass::Standard,
         measured_p95_ms: None,
+        intelligence_index: None,
         id: m.id,
     }
 }
@@ -330,6 +331,7 @@ mod tests {
             provider_ignore: vec![],
             model_allowlist: vec![],
             model_denylist: vec![],
+            min_intelligence_index: None,
         };
         flags(&mut p);
         p

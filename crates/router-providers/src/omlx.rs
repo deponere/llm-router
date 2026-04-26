@@ -192,6 +192,7 @@ fn from_api_model(m: ApiModel, cfg: &RegistryConfig) -> ModelCandidate {
         is_moderated: false,
         privacy_class: PrivacyClass::Local,
         measured_p95_ms: None,
+        intelligence_index: None,
         id: m.id,
     }
 }

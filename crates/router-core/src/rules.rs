@@ -25,6 +25,7 @@ pub enum FilterReason {
     PrivacyTagForcesLocal,
     ProviderOnlyMismatch,
     ProviderIgnored,
+    IntelligenceTooLow { got: Option<f64>, cap: f64 },
 }
 
 /// `true`, wenn der Kandidat alle Hard-Filter überlebt.
@@ -136,6 +137,15 @@ pub fn passes_all(
         }
     }
 
+    // 12. Intelligence-Filter: erforderlicher Mindest-Index aus AA. Modelle
+    //     ohne Bewertung werden verworfen, wenn der Filter aktiv ist.
+    if let Some(cap) = profile.min_intelligence_index {
+        match cand.intelligence_index {
+            Some(v) if v >= cap => {}
+            other => return Err(FilterReason::IntelligenceTooLow { got: other, cap }),
+        }
+    }
+
     Ok(())
 }
 
@@ -174,6 +184,7 @@ mod tests {
             is_moderated: false,
             privacy_class: PrivacyClass::Zdr,
             measured_p95_ms: None,
+            intelligence_index: None,
         }
     }
 
@@ -197,6 +208,7 @@ mod tests {
             provider_ignore: vec![],
             model_allowlist: vec![],
             model_denylist: vec![],
+            min_intelligence_index: None,
         }
     }
 

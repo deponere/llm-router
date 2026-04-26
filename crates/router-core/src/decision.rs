@@ -25,8 +25,10 @@ pub struct AcceptedEntry {
     pub latency_score: f64,
     pub context_score: f64,
     pub preference_score: f64,
+    pub quality_score: f64,
     pub expected_cost_usd: f64,
     pub used_p95_ms: u32,
+    pub intelligence_index: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -106,6 +108,7 @@ fn to_accepted(s: &ScoredCandidate) -> AcceptedEntry {
         latency,
         context,
         preference,
+        quality,
         expected_cost_usd,
         used_p95_ms,
     } = s.breakdown;
@@ -117,8 +120,10 @@ fn to_accepted(s: &ScoredCandidate) -> AcceptedEntry {
         latency_score: latency,
         context_score: context,
         preference_score: preference,
+        quality_score: quality,
         expected_cost_usd,
         used_p95_ms,
+        intelligence_index: s.model.intelligence_index,
     }
 }
 
@@ -146,6 +151,10 @@ fn format_reason(r: &FilterReason) -> String {
         FilterReason::PrivacyTagForcesLocal => "privacy_tag_forces_local".into(),
         FilterReason::ProviderOnlyMismatch => "provider_only_mismatch".into(),
         FilterReason::ProviderIgnored => "provider_ignored".into(),
+        FilterReason::IntelligenceTooLow { got, cap } => match got {
+            Some(v) => format!("intelligence_too_low ({v:.1} < {cap:.1})"),
+            None => format!("intelligence_unknown (cap {cap:.1})"),
+        },
     }
 }
 
@@ -173,13 +182,14 @@ mod tests {
                 PrivacyClass::Zdr
             },
             measured_p95_ms: None,
+            intelligence_index: None,
         }
     }
 
     fn cheap_profile() -> ResolvedProfile {
         ResolvedProfile {
             name: "cheap".into(),
-            weights: Weights { cost: 1.0, latency: 0.0, context: 0.0, preference: 0.0 },
+            weights: Weights { cost: 1.0, latency: 0.0, context: 0.0, preference: 0.0, quality: 0.0 },
             max_price_out_per_mtok: Some(5.0),
             max_price_in_per_mtok: None,
             max_latency_p95_ms: None,
@@ -196,6 +206,7 @@ mod tests {
             provider_ignore: vec![],
             model_allowlist: vec![],
             model_denylist: vec![],
+            min_intelligence_index: None,
         }
     }
 

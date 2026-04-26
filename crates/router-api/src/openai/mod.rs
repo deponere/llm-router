@@ -20,7 +20,7 @@ use crate::state::AppState;
 pub async fn list_models(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let snap = state
         .registry
-        .snapshot()
+        .enriched_snapshot()
         .await
         .map_err(|e| ApiError::Upstream(e.to_string()))?;
     let data: Vec<Value> = snap
@@ -67,7 +67,7 @@ pub async fn chat_completions(
 
     let snap = state
         .registry
-        .snapshot()
+        .enriched_snapshot()
         .await
         .map_err(|e| ApiError::Upstream(e.to_string()))?;
     let (profile, decision) = decide_for(&norm, &state.config, &snap)?;

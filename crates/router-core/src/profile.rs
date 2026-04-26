@@ -32,6 +32,8 @@ pub struct ResolvedProfile {
     pub provider_quantizations: Vec<String>,
     pub provider_only: Vec<String>,
     pub provider_ignore: Vec<String>,
+
+    pub min_intelligence_index: Option<f64>,
 }
 
 impl ResolvedProfile {
@@ -66,6 +68,7 @@ impl ResolvedProfile {
             provider_quantizations: p.provider_quantizations.clone(),
             provider_only: p.provider_only.clone(),
             provider_ignore: p.provider_ignore.clone(),
+            min_intelligence_index: p.min_intelligence_index,
         }
     }
 

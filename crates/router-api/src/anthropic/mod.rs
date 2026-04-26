@@ -37,7 +37,7 @@ pub async fn messages(
 
     let snap = state
         .registry
-        .snapshot()
+        .enriched_snapshot()
         .await
         .map_err(|e| ApiError::Upstream(e.to_string()))?;
     let (profile, decision) = decide_for(&norm, &state.config, &snap)?;
@@ -101,7 +101,7 @@ pub async fn messages(
     Ok(Sse::new(event_stream).keep_alive(KeepAlive::default()).into_response())
 }
 
-fn anthropic_to_norm(body: &Value) -> Result<NormRequest, ApiError> {
+pub fn anthropic_to_norm(body: &Value) -> Result<NormRequest, ApiError> {
     let mut req = NormRequest::default();
     req.model_hint = body.get("model").and_then(|v| v.as_str()).map(|s| s.to_string());
     req.profile_hint = body

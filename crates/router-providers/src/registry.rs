@@ -8,6 +8,7 @@ use moka::future::Cache;
 use router_config::{Config, RegistryConfig};
 use router_core::registry::{Backend, ModelCandidate, PrivacyClass, Registry};
 
+use crate::artificial_analysis::ArtificialAnalysisClient;
 use crate::metrics::LatencyTracker;
 use crate::omlx::OMlxClient;
 use crate::openrouter::OpenRouterClient;
@@ -27,6 +28,7 @@ pub struct RegistryHandle {
     registry_cfg: RegistryConfig,
     cache: Cache<&'static str, Arc<Registry>>,
     tracker: LatencyTracker,
+    aa: ArtificialAnalysisClient,
 }
 
 const CACHE_KEY: &str = "registry";
@@ -49,18 +51,21 @@ impl RegistryHandle {
             .max_capacity(1)
             .time_to_live(Duration::from_secs(5 * 60))
             .build();
+        let aa = ArtificialAnalysisClient::new(&config.registry.intelligence);
         Self {
             openrouter,
             omlx,
             registry_cfg: config.registry.clone(),
             cache,
             tracker,
+            aa,
         }
     }
 
     pub fn openrouter(&self) -> Option<&OpenRouterClient> { self.openrouter.as_ref() }
     pub fn omlx(&self) -> Option<&OMlxClient> { self.omlx.as_ref() }
     pub fn tracker(&self) -> &LatencyTracker { &self.tracker }
+    pub fn artificial_analysis(&self) -> &ArtificialAnalysisClient { &self.aa }
 
     /// Liefert den aktuellen Snapshot (mit frischen Latenz-Messungen).
     pub async fn snapshot(&self) -> Result<Arc<Registry>, RegistryError> {
@@ -109,6 +114,29 @@ impl RegistryHandle {
             m.measured_p95_ms = self.tracker.p95_ms(m.backend, &m.id);
         }
         out
+    }
+
+    /// Versorgt einen Snapshot mit Artificial-Analysis-Scores. Bei Fehler oder
+    /// disabled bleibt das Feld `intelligence_index` einfach `None`.
+    pub async fn enriched_snapshot(&self) -> Result<Arc<Registry>, RegistryError> {
+        let snap = self.snapshot().await?;
+        if !self.aa.enabled() {
+            return Ok(snap);
+        }
+        let index = match self.aa.snapshot().await {
+            Ok(idx) => idx,
+            Err(e) => {
+                tracing::warn!(error=%e, "artificial-analysis fetch failed, continuing without quality scores");
+                return Ok(snap);
+            }
+        };
+        let mut out = (*snap).clone();
+        for m in &mut out.models {
+            if let Some(scores) = self.aa.lookup(&index, &m.id) {
+                m.intelligence_index = scores.intelligence_index;
+            }
+        }
+        Ok(Arc::new(out))
     }
 }
 

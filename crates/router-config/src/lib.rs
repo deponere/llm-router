@@ -70,7 +70,34 @@ pub struct RegistryConfig {
     pub overrides: Vec<RegistryOverride>,
     #[serde(default)]
     pub privacy: PrivacyMap,
+    #[serde(default)]
+    pub intelligence: IntelligenceConfig,
 }
+
+/// Konfiguration für die Artificial-Analysis-Anbindung.
+/// Wenn `enabled = false` (Default) oder kein API-Key gesetzt, wird der
+/// Score-Term `quality` für alle Modelle 0.0 — bestehender Betrieb bleibt
+/// unverändert.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct IntelligenceConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_aa_api_key_env")]
+    pub api_key_env: String,
+    #[serde(default = "default_aa_base_url")]
+    pub base_url: String,
+    /// Cache-TTL in Sekunden. Default: 24 h.
+    #[serde(default = "default_aa_ttl")]
+    pub ttl_seconds: u64,
+    /// Optionales explizites Mapping: Router-Modell-ID -> Artificial-Analysis-Slug.
+    /// Hat Vorrang vor Heuristiken (Suffix-Match nach `/`, Punkt-zu-Bindestrich).
+    #[serde(default)]
+    pub aliases: BTreeMap<String, String>,
+}
+
+fn default_aa_api_key_env() -> String { "AA_API_KEY".into() }
+fn default_aa_base_url() -> String { "https://artificialanalysis.ai/api/v2".into() }
+fn default_aa_ttl() -> u64 { 86_400 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct PrivacyMap {
@@ -130,6 +157,12 @@ pub struct Profile {
     pub provider_only: Vec<String>,
     #[serde(default)]
     pub provider_ignore: Vec<String>,
+
+    /// Hard-Filter: Modell muss einen Artificial-Analysis-Intelligence-Index
+    /// >= diesem Wert haben. Modelle ohne Bewertung werden ebenfalls gefiltert.
+    /// `None` = kein Filter.
+    #[serde(default)]
+    pub min_intelligence_index: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -142,17 +175,21 @@ pub struct Weights {
     pub context: f64,
     #[serde(default)]
     pub preference: f64,
+    /// Gewicht für den Artificial-Analysis-Intelligence-Index.
+    /// Modelle ohne Bewertung scoren 0 in diesem Term.
+    #[serde(default)]
+    pub quality: f64,
 }
 
 impl Default for Weights {
     fn default() -> Self {
-        Self { cost: 0.25, latency: 0.25, context: 0.25, preference: 0.25 }
+        Self { cost: 0.25, latency: 0.25, context: 0.25, preference: 0.25, quality: 0.0 }
     }
 }
 
 impl Weights {
     pub fn sum(&self) -> f64 {
-        self.cost + self.latency + self.context + self.preference
+        self.cost + self.latency + self.context + self.preference + self.quality
     }
 
     /// Gibt die Gewichte so zurück, dass sie auf 1.0 summieren. Wenn alle Null sind,
@@ -167,6 +204,7 @@ impl Weights {
                 latency: self.latency / s,
                 context: self.context / s,
                 preference: self.preference / s,
+                quality: self.quality / s,
             }
         }
     }
@@ -228,7 +266,7 @@ mod tests {
 
     #[test]
     fn weights_normalize() {
-        let w = Weights { cost: 2.0, latency: 2.0, context: 2.0, preference: 2.0 };
+        let w = Weights { cost: 2.0, latency: 2.0, context: 2.0, preference: 2.0, quality: 2.0 };
         let n = w.normalized();
         assert!((n.sum() - 1.0).abs() < 1e-9);
     }

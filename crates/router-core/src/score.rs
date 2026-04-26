@@ -29,6 +29,7 @@ pub struct ScoreBreakdown {
     pub latency: f64,
     pub context: f64,
     pub preference: f64,
+    pub quality: f64,
     pub expected_cost_usd: f64,
     pub used_p95_ms: u32,
 }
@@ -56,11 +57,17 @@ pub fn score_candidate(
 
     let preference_score = preference_rank(&profile.preferences, &cand.id);
 
+    // Quality kommt aus dem Artificial-Analysis-Intelligence-Index (0..100).
+    // Modelle ohne Bewertung erhalten 0 — niedriger als jedes bewertete Modell,
+    // aber kein Hard-Filter (dafür ist `min_intelligence_index` da).
+    let quality_score = clamp01(cand.intelligence_index.unwrap_or(0.0) / 100.0);
+
     let w = profile.weights;
     let score = w.cost * cost_score
         + w.latency * latency_score
         + w.context * context_score
-        + w.preference * preference_score;
+        + w.preference * preference_score
+        + w.quality * quality_score;
 
     ScoredCandidate {
         model: cand.clone(),
@@ -70,6 +77,7 @@ pub fn score_candidate(
             latency: latency_score,
             context: context_score,
             preference: preference_score,
+            quality: quality_score,
             expected_cost_usd,
             used_p95_ms: p95,
         },
@@ -137,6 +145,7 @@ mod tests {
             is_moderated: false,
             privacy_class: PrivacyClass::Zdr,
             measured_p95_ms: p95,
+            intelligence_index: None,
         }
     }
 
@@ -148,6 +157,7 @@ mod tests {
                 latency: 0.5,
                 context: 0.0,
                 preference: 0.0,
+                quality: 0.0,
             },
             max_price_out_per_mtok: None,
             max_price_in_per_mtok: None,
@@ -165,6 +175,7 @@ mod tests {
             provider_ignore: vec![],
             model_allowlist: vec![],
             model_denylist: vec![],
+            min_intelligence_index: None,
         }
     }
 

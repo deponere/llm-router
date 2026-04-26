@@ -165,6 +165,8 @@ pub struct ModelCandidate {
     pub privacy_class: PrivacyClass,
     /// Gemessene p95-Latenz (ms) aus dem lokalen Metrics-Tracker, wenn vorhanden.
     pub measured_p95_ms: Option<u32>,
+    /// Artificial-Analysis-Intelligence-Index (0..100), wenn verfügbar.
+    pub intelligence_index: Option<f64>,
 }
 
 /// Snapshot der gemergten Registry. In der Lauf-Instanz via
