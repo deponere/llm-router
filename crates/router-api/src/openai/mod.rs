@@ -13,7 +13,7 @@ use router_core::{Backend, NormMessage, NormRequest, NormRole};
 use serde_json::{json, Value};
 
 use crate::error::ApiError;
-use crate::routing::{announce_completion, announce_decision, decide_for, headers_to_hints, parse_privacy_tag};
+use crate::routing::{announce_completion, announce_decision, announce_fallback, decide_for, headers_to_hints, parse_privacy_tag, FALLBACK_MAX_ATTEMPTS};
 use crate::state::AppState;
 
 /// `GET /v1/models` — Union aus gemergter Registry.
@@ -84,33 +84,39 @@ async fn dispatch_openai(
     original_body: Value,
 ) -> Result<Response, ApiError> {
     let stream = norm.stream;
-    let winner = decision.winner.clone();
     let started = Instant::now();
 
-    let byte_stream: std::pin::Pin<
-        Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>,
-    > = match winner.backend {
-        Backend::OpenRouter => {
-            let Some(client) = state.registry.openrouter() else {
-                return Err(ApiError::Internal("OpenRouter backend not configured".into()));
-            };
-            let s = client
-                .chat_completion_stream(&winner.id, &profile, original_body)
-                .await
-                .map_err(|e| ApiError::Upstream(e.to_string()))?;
-            Box::pin(s.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))))
+    let mut candidates: Vec<router_core::ModelCandidate> = std::iter::once(decision.winner.clone())
+        .chain(decision.alternatives.into_iter())
+        .take(FALLBACK_MAX_ATTEMPTS)
+        .collect();
+    let mut byte_stream: Option<
+        std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>>,
+    > = None;
+    let mut winner = decision.winner.clone();
+    let mut last_err: Option<ApiError> = None;
+    while !candidates.is_empty() {
+        let cand = candidates.remove(0);
+        let attempt = setup_openai_stream(&state, &profile, &cand, original_body.clone()).await;
+        match attempt {
+            Ok(s) => {
+                winner = cand;
+                byte_stream = Some(s);
+                break;
+            }
+            Err(e) => {
+                let next = candidates
+                    .first()
+                    .map(|c| c.id.clone())
+                    .unwrap_or_else(|| "<none>".into());
+                announce_fallback("openai", &cand.id, &next, &e.to_string());
+                last_err = Some(e);
+            }
         }
-        Backend::OMlx => {
-            let Some(client) = state.registry.omlx() else {
-                return Err(ApiError::Internal("oMLX backend not configured".into()));
-            };
-            let s = client
-                .chat_completion_stream(&winner.id, original_body)
-                .await
-                .map_err(|e| ApiError::Upstream(e.to_string()))?;
-            Box::pin(s.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))))
-        }
-    };
+    }
+    let byte_stream = byte_stream.ok_or_else(|| {
+        last_err.unwrap_or_else(|| ApiError::Internal("no candidates available".into()))
+    })?;
 
     if stream {
         let event_stream = sse_from_bytes(
@@ -142,6 +148,45 @@ async fn dispatch_openai(
         let aggregated = aggregate_openai_sse(&bytes, &winner.id)
             .map_err(|e| ApiError::Upstream(format!("aggregation failed: {e}")))?;
         Ok(Json(aggregated).into_response())
+    }
+}
+
+async fn setup_openai_stream(
+    state: &AppState,
+    profile: &router_core::ResolvedProfile,
+    cand: &router_core::ModelCandidate,
+    body: Value,
+) -> Result<
+    std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>>,
+    ApiError,
+> {
+    match cand.backend {
+        Backend::OpenRouter => {
+            let client = state
+                .registry
+                .openrouter()
+                .ok_or_else(|| ApiError::Internal("OpenRouter backend not configured".into()))?;
+            let s = client
+                .chat_completion_stream(&cand.id, profile, body)
+                .await
+                .map_err(|e| ApiError::Upstream(e.to_string()))?;
+            Ok(Box::pin(
+                s.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))),
+            ))
+        }
+        Backend::OMlx => {
+            let client = state
+                .registry
+                .omlx()
+                .ok_or_else(|| ApiError::Internal("oMLX backend not configured".into()))?;
+            let s = client
+                .chat_completion_stream(&cand.id, body)
+                .await
+                .map_err(|e| ApiError::Upstream(e.to_string()))?;
+            Ok(Box::pin(
+                s.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))),
+            ))
+        }
     }
 }
 

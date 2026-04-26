@@ -17,7 +17,7 @@ use router_core::{Backend, NormMessage, NormRequest, NormRole};
 use serde_json::{json, Value};
 
 use crate::error::ApiError;
-use crate::routing::{announce_completion, announce_decision, decide_for, headers_to_hints, parse_privacy_tag};
+use crate::routing::{announce_completion, announce_decision, announce_fallback, decide_for, headers_to_hints, parse_privacy_tag, FALLBACK_MAX_ATTEMPTS};
 use crate::state::AppState;
 
 pub async fn messages(
@@ -43,35 +43,61 @@ pub async fn messages(
     let (profile, decision) = decide_for(&norm, &state.config, &snap)?;
     announce_decision("anthropic", &profile, &decision, &norm);
 
-    let openai_body = norm_to_openai(&norm, &decision.winner.id, true);
-
-    let winner = decision.winner.clone();
     let started = Instant::now();
 
-    let byte_stream: std::pin::Pin<
-        Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>,
-    > = match winner.backend {
-        Backend::OpenRouter => {
-            let Some(client) = state.registry.openrouter() else {
-                return Err(ApiError::Internal("OpenRouter backend not configured".into()));
-            };
-            let s = client
-                .chat_completion_stream(&winner.id, &profile, openai_body)
-                .await
-                .map_err(|e| ApiError::Upstream(e.to_string()))?;
-            Box::pin(s.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))))
+    let mut candidates: Vec<router_core::ModelCandidate> = std::iter::once(decision.winner.clone())
+        .chain(decision.alternatives.into_iter())
+        .take(FALLBACK_MAX_ATTEMPTS)
+        .collect();
+    let mut byte_stream: Option<
+        std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>>,
+    > = None;
+    let mut winner = decision.winner.clone();
+    let mut last_err: Option<ApiError> = None;
+    while !candidates.is_empty() {
+        let cand = candidates.remove(0);
+        let openai_body = norm_to_openai(&norm, &cand.id, true);
+        let attempt = match cand.backend {
+            Backend::OpenRouter => match state.registry.openrouter() {
+                Some(client) => client
+                    .chat_completion_stream(&cand.id, &profile, openai_body)
+                    .await
+                    .map_err(|e| ApiError::Upstream(e.to_string()))
+                    .map(|s| -> std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>> {
+                        Box::pin(s.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))))
+                    }),
+                None => Err(ApiError::Internal("OpenRouter backend not configured".into())),
+            },
+            Backend::OMlx => match state.registry.omlx() {
+                Some(client) => client
+                    .chat_completion_stream(&cand.id, openai_body)
+                    .await
+                    .map_err(|e| ApiError::Upstream(e.to_string()))
+                    .map(|s| -> std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>> {
+                        Box::pin(s.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))))
+                    }),
+                None => Err(ApiError::Internal("oMLX backend not configured".into())),
+            },
+        };
+        match attempt {
+            Ok(s) => {
+                winner = cand;
+                byte_stream = Some(s);
+                break;
+            }
+            Err(e) => {
+                let next = candidates
+                    .first()
+                    .map(|c| c.id.clone())
+                    .unwrap_or_else(|| "<none>".into());
+                announce_fallback("anthropic", &cand.id, &next, &e.to_string());
+                last_err = Some(e);
+            }
         }
-        Backend::OMlx => {
-            let Some(client) = state.registry.omlx() else {
-                return Err(ApiError::Internal("oMLX backend not configured".into()));
-            };
-            let s = client
-                .chat_completion_stream(&winner.id, openai_body)
-                .await
-                .map_err(|e| ApiError::Upstream(e.to_string()))?;
-            Box::pin(s.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))))
-        }
-    };
+    }
+    let byte_stream = byte_stream.ok_or_else(|| {
+        last_err.unwrap_or_else(|| ApiError::Internal("no candidates available".into()))
+    })?;
 
     // Stream: OpenAI-SSE -> Anthropic-Events
     let tracker = state.tracker.clone();

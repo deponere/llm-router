@@ -78,6 +78,25 @@ pub fn announce_decision(api: &str, profile: &ResolvedProfile, decision: &Decisi
     );
 }
 
+/// Druckt eine Fallback-Zeile, wenn ein Modell beim Setup mit Upstream-Fehler
+/// scheitert und der Router auf das nächstbeste Modell ausweicht.
+pub fn announce_fallback(api: &str, failed: &str, next: &str, error: &str) {
+    const RESET:  &str = "\x1b[0m";
+    const DIM:    &str = "\x1b[2m";
+    const RED:    &str = "\x1b[31m";
+    const YELLOW: &str = "\x1b[33m";
+    const GREEN:  &str = "\x1b[32m";
+    let now = chrono_like_hhmmss();
+    let trimmed: String = error.chars().take(140).collect();
+    println!(
+        "{DIM}{now}{RESET} {YELLOW}↻{RESET} {DIM}[{api}]{RESET} {RED}{failed}{RESET} → {GREEN}{next}{RESET} {DIM}({trimmed}){RESET}",
+    );
+}
+
+/// Maximale Anzahl von Modellen, die der Router pro Request durchprobiert,
+/// bevor er den letzten Upstream-Fehler an den Caller zurückreicht.
+pub const FALLBACK_MAX_ATTEMPTS: usize = 3;
+
 /// Druckt eine Abschluss-Zeile mit Gesamtdauer (und ggf. Ist-Kosten) auf stdout.
 pub fn announce_completion(
     api: &str,

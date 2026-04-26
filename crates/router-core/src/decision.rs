@@ -42,6 +42,9 @@ pub struct DecisionTrace {
 #[derive(Debug, Clone)]
 pub struct Decision {
     pub winner: ModelCandidate,
+    /// Alle anderen ranked Kandidaten in absteigendem Score, ohne den Winner.
+    /// Wird vom Egress als Fallback-Cascade durchprobiert.
+    pub alternatives: Vec<ModelCandidate>,
     pub trace: DecisionTrace,
 }
 
@@ -85,6 +88,8 @@ pub fn decide(
     let ranked = rank(survivors);
     let accepted: Vec<AcceptedEntry> = ranked.iter().map(to_accepted).collect();
     let winner = ranked[0].model.clone();
+    let alternatives: Vec<ModelCandidate> =
+        ranked.iter().skip(1).map(|s| s.model.clone()).collect();
     let trace = DecisionTrace {
         profile: profile.name.clone(),
         total_candidates: total,
@@ -99,7 +104,7 @@ pub fn decide(
         "router decision"
     );
 
-    Ok(Decision { winner, trace })
+    Ok(Decision { winner, alternatives, trace })
 }
 
 fn to_accepted(s: &ScoredCandidate) -> AcceptedEntry {
