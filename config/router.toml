@@ -89,6 +89,12 @@ ttl_seconds = 86400
 
 [profiles.default]
 weights = { cost = 0.30, latency = 0.20, context = 0.15, preference = 0.20, quality = 0.15 }
+preferences = [
+    "Qwen3.6-35B-A3B-bf16",
+    "gpt-oss-20b-MXFP4-Q8",
+    "gemma-4-26B-A4B-it-MLX-8bit",
+    "gemma-4-e2b-it-4bit",
+]
 provider_require_parameters = true
 
 [profiles.cheap]
