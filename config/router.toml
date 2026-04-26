@@ -64,9 +64,15 @@ ttl_seconds = 86400
 
 # Optionales Mapping Router-Modell-ID -> AA-Slug. Vorrang vor der Heuristik
 # (Suffix nach `/`, lowercase, Punkt -> Bindestrich).
-# [registry.intelligence.aliases]
-# "openai/gpt-5.5" = "gpt-5-5"
-# "anthropic/claude-opus-4-7" = "claude-opus-4-7"
+# Wichtig fuer oMLX: backend-spezifische IDs (mit Quantisierungs-Suffix) muessen
+# auf den generischen Architektur-Slug bei AA gemappt werden. Die AA-Bewertung
+# entspricht dem unquantisierten Modell — fuer 4bit/8bit ist das ein optimist.
+# Proxy.
+[registry.intelligence.aliases]
+"Qwen3.6-35B-A3B-bf16" = "qwen3-6-35b-a3b"
+"gemma-4-26B-A4B-it-MLX-8bit" = "gemma-4-26b-a4b"
+"gemma-4-e2b-it-4bit" = "gemma-4-e2b"
+"gpt-oss-20b-MXFP4-Q8" = "gpt-oss-20b"
 
 # ---------------- Profile ----------------
 
