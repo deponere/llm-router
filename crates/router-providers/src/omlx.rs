@@ -162,7 +162,9 @@ fn from_api_model(m: ApiModel, cfg: &RegistryConfig) -> ModelCandidate {
     }
 
     for ov in &cfg.overrides {
-        if ov.backend.eq_ignore_ascii_case("omlx") && m.id.starts_with(&ov.id_prefix) {
+        if ov.backend.eq_ignore_ascii_case("omlx")
+    && m.id.to_ascii_lowercase().starts_with(&ov.id_prefix.to_ascii_lowercase())
+{
             if !ov.input_modalities.is_empty() {
                 input_modalities = ModalitySet::from_strings(&ov.input_modalities);
             }
