@@ -95,7 +95,12 @@ preferences = [
     "gemma-4-26B-A4B-it-MLX-8bit",
     "gemma-4-e2b-it-4bit",
 ]
-provider_require_parameters = true
+# :free-Varianten haben enge Provider-Constraints und scheitern oft an
+# Tool-Parametern. Wenn der Caller `:free` will, ueber `cheap` oder explizit pinnen.
+model_denylist = ["*:free"]
+# require_parameters = false: OpenRouter darf unsupported Params silently droppen
+# statt 404 zu werfen. Das ist Tradeoff fuer Robustheit bei pi-aehnlichen Clients.
+provider_require_parameters = false
 
 [profiles.cheap]
 weights = { cost = 0.9, latency = 0.05, context = 0.05, preference = 0.0 }
