@@ -228,7 +228,7 @@ where
             Err(e) => {
                 events.push(Ok(Event::default()
                     .event("error")
-                    .data(format!("{{\"error\":\"{}\"}}", e))));
+                    .data(json!({ "error": e.to_string() }).to_string())));
             }
         }
         futures::stream::iter(events)
@@ -302,7 +302,7 @@ fn parse_sse_data(bytes: &[u8]) -> Option<String> {
     if data.is_empty() { None } else { Some(data) }
 }
 
-async fn collect_stream<S>(mut stream: S) -> Result<Vec<u8>, ApiError>
+pub(crate) async fn collect_stream<S>(mut stream: S) -> Result<Vec<u8>, ApiError>
 where
     S: Stream<Item = Result<bytes::Bytes, std::io::Error>> + Unpin,
 {
@@ -314,38 +314,119 @@ where
     Ok(out)
 }
 
-/// Aggregiert einen abgesammelten SSE-Stream zu einem klassischen
-/// OpenAI-Chat-Completion-Non-Stream-Body (für Clients, die `stream=false`
-/// geschickt haben).
-fn aggregate_openai_sse(raw: &[u8], model_id: &str) -> Result<Value, String> {
-    let text = std::str::from_utf8(raw).map_err(|e| e.to_string())?;
-    let mut content = String::new();
-    let mut finish_reason: Option<String> = None;
-    for block in text.split("\n\n") {
+/// Ein zusammengebauter Tool-Call aus den `delta.tool_calls`-Fragmenten eines
+/// OpenAI-SSE-Streams. `arguments` wird über mehrere Chunks konkateniert.
+#[derive(Default, Clone)]
+pub(crate) struct ToolAccum {
+    pub id: String,
+    pub name: String,
+    pub arguments: String,
+}
+
+/// Das komplette Ergebnis eines abgesammelten OpenAI-Chat-Completion-Streams.
+#[derive(Default)]
+pub(crate) struct Accumulated {
+    pub content: String,
+    pub tool_calls: Vec<ToolAccum>,
+    pub finish_reason: Option<String>,
+    pub prompt_tokens: Option<u64>,
+    pub completion_tokens: Option<u64>,
+    pub cost: Option<f64>,
+}
+
+/// Läuft über einen kompletten OpenAI-SSE-Body und baut Text, Tool-Calls,
+/// finish_reason und Usage zusammen. CRLF- und LF-Separatoren werden beide
+/// erkannt. Fragmente, die keine `delta` liefern (z. B. reine Usage-Events),
+/// tragen trotzdem ihre Usage/Cost bei.
+pub(crate) fn accumulate_completion(raw: &[u8]) -> Accumulated {
+    let mut acc = Accumulated::default();
+    let Ok(text) = std::str::from_utf8(raw) else { return acc };
+    // CRLF → LF normalisieren, damit `split("\n\n")` beide Upstream-Varianten trifft.
+    let normalized = text.replace("\r\n", "\n");
+    for block in normalized.split("\n\n") {
         let data = block
             .lines()
             .filter_map(|l| l.strip_prefix("data: ").or_else(|| l.strip_prefix("data:")))
             .collect::<Vec<_>>()
             .join("\n");
-        if data.trim().is_empty() { continue; }
-        if data.trim() == "[DONE]" { continue; }
-        let v: Value = match serde_json::from_str(&data) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        if let Some(delta) = v["choices"].get(0).and_then(|c| c.get("delta")) {
-            if let Some(s) = delta.get("content").and_then(|c| c.as_str()) {
-                content.push_str(s);
+        let data = data.trim();
+        if data.is_empty() || data == "[DONE]" { continue; }
+        let Ok(v) = serde_json::from_str::<Value>(data) else { continue };
+        if let Some(u) = v.get("usage") {
+            if let Some(p) = u.get("prompt_tokens").and_then(|x| x.as_u64()) { acc.prompt_tokens = Some(p); }
+            if let Some(c) = u.get("completion_tokens").and_then(|x| x.as_u64()) { acc.completion_tokens = Some(c); }
+            if let Some(c) = u.get("cost").and_then(|x| x.as_f64()) { acc.cost = Some(c); }
+        }
+        let Some(choice) = v["choices"].get(0) else { continue };
+        // OpenRouter/oMLX streamen immer (stream=true erzwungen), also `delta`;
+        // ein `message`-Feld fangen wir als Fallback ab, falls ein Upstream
+        // doch einen Vollblock schickt.
+        let node = choice.get("delta").or_else(|| choice.get("message"));
+        if let Some(node) = node {
+            if let Some(s) = node.get("content").and_then(|c| c.as_str()) {
+                acc.content.push_str(s);
+            }
+            if let Some(tcs) = node.get("tool_calls").and_then(|t| t.as_array()) {
+                for tc in tcs {
+                    let idx = tc.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
+                    while acc.tool_calls.len() <= idx { acc.tool_calls.push(ToolAccum::default()); }
+                    let slot = &mut acc.tool_calls[idx];
+                    if let Some(id) = tc.get("id").and_then(|x| x.as_str()) {
+                        if !id.is_empty() { slot.id = id.to_string(); }
+                    }
+                    if let Some(f) = tc.get("function") {
+                        if let Some(n) = f.get("name").and_then(|x| x.as_str()) {
+                            if !n.is_empty() { slot.name = n.to_string(); }
+                        }
+                        if let Some(a) = f.get("arguments").and_then(|x| x.as_str()) {
+                            slot.arguments.push_str(a);
+                        }
+                    }
+                }
             }
         }
-        if let Some(fr) = v["choices"]
-            .get(0)
-            .and_then(|c| c.get("finish_reason"))
-            .and_then(|x| x.as_str())
-        {
-            finish_reason = Some(fr.to_string());
+        if let Some(fr) = choice.get("finish_reason").and_then(|x| x.as_str()) {
+            acc.finish_reason = Some(fr.to_string());
         }
     }
+    acc
+}
+
+/// Aggregiert einen abgesammelten SSE-Stream zu einem klassischen
+/// OpenAI-Chat-Completion-Non-Stream-Body (für Clients, die `stream=false`
+/// geschickt haben).
+fn aggregate_openai_sse(raw: &[u8], model_id: &str) -> Result<Value, String> {
+    let acc = accumulate_completion(raw);
+
+    let mut message = json!({ "role": "assistant" });
+    let obj = message.as_object_mut().unwrap();
+    if acc.tool_calls.is_empty() {
+        obj.insert("content".into(), json!(acc.content));
+    } else {
+        // OpenAI setzt `content` bei reinen Tool-Calls auf null.
+        obj.insert(
+            "content".into(),
+            if acc.content.is_empty() { Value::Null } else { json!(acc.content) },
+        );
+        let tcs: Vec<Value> = acc
+            .tool_calls
+            .iter()
+            .enumerate()
+            .map(|(i, t)| {
+                json!({
+                    "id": if t.id.is_empty() { format!("call_{i}") } else { t.id.clone() },
+                    "type": "function",
+                    "function": { "name": t.name, "arguments": t.arguments },
+                })
+            })
+            .collect();
+        obj.insert("tool_calls".into(), json!(tcs));
+    }
+
+    let finish_reason = acc.finish_reason.clone().unwrap_or_else(|| {
+        if acc.tool_calls.is_empty() { "stop".to_string() } else { "tool_calls".to_string() }
+    });
+
     Ok(json!({
         "id": format!("chatcmpl-{}", uuid::Uuid::new_v4().simple()),
         "object": "chat.completion",
@@ -353,9 +434,14 @@ fn aggregate_openai_sse(raw: &[u8], model_id: &str) -> Result<Value, String> {
         "model": model_id,
         "choices": [{
             "index": 0,
-            "message": { "role": "assistant", "content": content },
-            "finish_reason": finish_reason.unwrap_or_else(|| "stop".to_string()),
+            "message": message,
+            "finish_reason": finish_reason,
         }],
+        "usage": {
+            "prompt_tokens": acc.prompt_tokens.unwrap_or(0),
+            "completion_tokens": acc.completion_tokens.unwrap_or(0),
+            "total_tokens": acc.prompt_tokens.unwrap_or(0) + acc.completion_tokens.unwrap_or(0),
+        },
     }))
 }
 
@@ -488,5 +574,50 @@ fn extract_content(v: Option<&Value>) -> (String, Vec<router_core::ImagePart>) {
             (text, images)
         }
         _ => (String::new(), vec![]),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accumulate_text_and_usage_crlf() {
+        // CRLF-separierte Events + Usage-Trailer.
+        let raw = "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\r\n\r\n\
+                   data: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}]}\r\n\r\n\
+                   data: {\"choices\":[],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":2}}\r\n\r\n\
+                   data: [DONE]\r\n\r\n";
+        let acc = accumulate_completion(raw.as_bytes());
+        assert_eq!(acc.content, "Hello");
+        assert_eq!(acc.finish_reason.as_deref(), Some("stop"));
+        assert_eq!(acc.prompt_tokens, Some(5));
+        assert_eq!(acc.completion_tokens, Some(2));
+        assert!(acc.tool_calls.is_empty());
+    }
+
+    #[test]
+    fn accumulate_tool_call_across_chunks() {
+        // id/name im ersten Chunk, arguments über zwei Chunks gestückelt.
+        let raw = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\"}}]}}]}\n\n\
+                   data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"Berlin\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n\
+                   data: [DONE]\n\n";
+        let acc = accumulate_completion(raw.as_bytes());
+        assert_eq!(acc.tool_calls.len(), 1);
+        assert_eq!(acc.tool_calls[0].id, "call_1");
+        assert_eq!(acc.tool_calls[0].name, "get_weather");
+        assert_eq!(acc.tool_calls[0].arguments, "{\"city\":\"Berlin\"}");
+    }
+
+    #[test]
+    fn aggregate_openai_puts_tool_calls_in_message() {
+        let raw = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_9\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n\
+                   data: [DONE]\n\n";
+        let v = aggregate_openai_sse(raw.as_bytes(), "m/x").unwrap();
+        let msg = &v["choices"][0]["message"];
+        assert!(msg["content"].is_null());
+        assert_eq!(msg["tool_calls"][0]["function"]["name"], "f");
+        assert_eq!(v["choices"][0]["finish_reason"], "tool_calls");
+        assert!(v["usage"].is_object());
     }
 }

@@ -19,6 +19,7 @@ use serde_json::{json, Value};
 use crate::error::ApiError;
 
 type ByteStream = std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>>;
+use crate::openai::{accumulate_completion, collect_stream, Accumulated};
 use crate::routing::{announce_completion, announce_decision, announce_fallback, decide_for, headers_to_hints, parse_privacy_tag, FALLBACK_MAX_ATTEMPTS};
 use crate::state::AppState;
 
@@ -99,6 +100,27 @@ pub async fn messages(
         last_err.unwrap_or_else(|| ApiError::Internal("no candidates available".into()))
     })?;
 
+    // Non-Stream: Upstream-SSE absammeln und zu einem Anthropic-Messages-Body
+    // aggregieren (Clients mit `stream: false` erwarten JSON, kein SSE).
+    if !norm.stream {
+        let bytes = collect_stream(byte_stream).await?;
+        let elapsed = started.elapsed();
+        let acc = accumulate_completion(&bytes);
+        state.tracker.record(winner.backend, &winner.id, elapsed);
+        announce_completion("anthropic", &winner.id, elapsed, acc.cost);
+        state.history.record(crate::history::Transaction {
+            unix_ts: now_unix(),
+            api: "anthropic".into(),
+            profile: profile.name.clone(),
+            backend: format!("{:?}", winner.backend),
+            model_id: winner.id.clone(),
+            duration_ms: elapsed.as_millis() as u64,
+            cost_usd: acc.cost,
+        });
+        let body = anthropic_body_from(&acc, &winner.id);
+        return Ok(Json(body).into_response());
+    }
+
     // Stream: OpenAI-SSE -> Anthropic-Events
     let tracker = state.tracker.clone();
     let history = state.history.clone();
@@ -134,7 +156,7 @@ pub fn anthropic_to_norm(body: &Value) -> Result<NormRequest, ApiError> {
             .get("route_profile")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
-        stream: body.get("stream").and_then(|v| v.as_bool()).unwrap_or(true),
+        stream: body.get("stream").and_then(|v| v.as_bool()).unwrap_or(false),
         temperature: body.get("temperature").and_then(|v| v.as_f64()).map(|x| x as f32),
         top_p: body.get("top_p").and_then(|v| v.as_f64()).map(|x| x as f32),
         max_tokens: body.get("max_tokens").and_then(|v| v.as_u64()).map(|x| x as u32),
@@ -428,4 +450,90 @@ fn parse_sse_data(bytes: &[u8]) -> Option<String> {
 
 fn sse_event(name: &str, payload: Value) -> Event {
     Event::default().event(name).data(payload.to_string())
+}
+
+/// Baut aus einem abgesammelten OpenAI-Completion-Stream einen
+/// Anthropic-`/v1/messages`-Non-Stream-Body.
+fn anthropic_body_from(acc: &Accumulated, model_id: &str) -> Value {
+    let mut content: Vec<Value> = Vec::new();
+    if !acc.content.is_empty() {
+        content.push(json!({ "type": "text", "text": acc.content }));
+    }
+    for (i, t) in acc.tool_calls.iter().enumerate() {
+        let input: Value = serde_json::from_str(&t.arguments).unwrap_or_else(|_| json!({}));
+        content.push(json!({
+            "type": "tool_use",
+            "id": if t.id.is_empty() { format!("toolu_{i}") } else { t.id.clone() },
+            "name": t.name,
+            "input": input,
+        }));
+    }
+    let stop_reason = if !acc.tool_calls.is_empty() {
+        "tool_use"
+    } else {
+        match acc.finish_reason.as_deref() {
+            Some("length") => "max_tokens",
+            _ => "end_turn",
+        }
+    };
+    json!({
+        "id": format!("msg_{}", uuid::Uuid::new_v4().simple()),
+        "type": "message",
+        "role": "assistant",
+        "model": model_id,
+        "content": content,
+        "stop_reason": stop_reason,
+        "stop_sequence": null,
+        "usage": {
+            "input_tokens": acc.prompt_tokens.unwrap_or(0),
+            "output_tokens": acc.completion_tokens.unwrap_or(0),
+        },
+    })
+}
+
+fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn non_stream_default_is_false() {
+        // Anthropic-API defaultet auf non-stream, wenn `stream` fehlt.
+        let req = anthropic_to_norm(&json!({
+            "model": "x",
+            "messages": [{ "role": "user", "content": "hi" }]
+        }))
+        .unwrap();
+        assert!(!req.stream);
+    }
+
+    #[test]
+    fn body_from_text_completion() {
+        let raw = "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"},\"finish_reason\":\"stop\"}]}\n\n\
+                   data: [DONE]\n\n";
+        let acc = accumulate_completion(raw.as_bytes());
+        let v = anthropic_body_from(&acc, "m/x");
+        assert_eq!(v["type"], "message");
+        assert_eq!(v["content"][0]["type"], "text");
+        assert_eq!(v["content"][0]["text"], "hi");
+        assert_eq!(v["stop_reason"], "end_turn");
+    }
+
+    #[test]
+    fn body_from_tool_call_yields_tool_use_block() {
+        let raw = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\\\"q\\\":\\\"x\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n\
+                   data: [DONE]\n\n";
+        let acc = accumulate_completion(raw.as_bytes());
+        let v = anthropic_body_from(&acc, "m/x");
+        assert_eq!(v["content"][0]["type"], "tool_use");
+        assert_eq!(v["content"][0]["name"], "lookup");
+        assert_eq!(v["content"][0]["input"]["q"], "x");
+        assert_eq!(v["stop_reason"], "tool_use");
+    }
 }
