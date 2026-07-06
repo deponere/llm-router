@@ -17,8 +17,5 @@ futures = { workspace = true }
 bytes = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-async-trait = { workspace = true }
 parking_lot = { workspace = true }
 moka = { workspace = true }
-eventsource-stream = { workspace = true }
-pin-project-lite = { workspace = true }

@@ -30,7 +30,6 @@ thiserror = "2"
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-async-trait = "0.1"
 futures = "0.3"
 tokio-stream = "0.1"
 bytes = "1"
@@ -38,9 +37,6 @@ parking_lot = "0.12"
 moka = { version = "0.12", features = ["future"] }
 uuid = { version = "1", features = ["v4"] }
 dotenvy = "0.15"
-tiktoken-rs = "0.7"
-eventsource-stream = "0.2"
-pin-project-lite = "0.2"
 
 [profile.release]
 lto = "thin"

@@ -147,7 +147,7 @@ impl NormRequest {
     }
 }
 
-/// Rohe Zeichenanzahl / 4 als stabiler Fallback, wenn tiktoken fehlschlägt.
+/// Rohe Zeichenanzahl / 4 als stabile Schätzung.
 /// Genau genug für Context-Filter (+Reserve), weil wir eh Reserve aufschlagen.
 pub fn estimate_tokens(messages: &[NormMessage]) -> u32 {
     // Wir addieren eine kleine Pauschale pro Nachricht (Rolle + Separator-Tokens).
