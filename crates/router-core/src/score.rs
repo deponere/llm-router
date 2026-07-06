@@ -97,10 +97,10 @@ fn preference_rank(prefs: &[String], id: &str) -> f64 {
 }
 
 fn clamp01(x: f64) -> f64 {
-    if x.is_nan() { 0.0 }
-    else if x < 0.0 { 0.0 }
-    else if x > 1.0 { 1.0 }
-    else { x }
+    if x.is_nan() {
+        return 0.0;
+    }
+    x.clamp(0.0, 1.0)
 }
 
 /// Sortiert Kandidaten absteigend nach Score, mit festgelegtem Tiebreak.
@@ -181,9 +181,7 @@ mod tests {
 
     #[test]
     fn cheaper_wins_with_equal_latency() {
-        let mut req = NormRequest::default();
-        req.prompt_tokens_est = 1000;
-        req.max_tokens = Some(500);
+        let req = NormRequest { prompt_tokens_est: 1000, max_tokens: Some(500), ..Default::default() };
         let a = cand(Backend::OpenRouter, "a/cheap", 200_000, 1.0, Some(1000));
         let b = cand(Backend::OpenRouter, "b/expensive", 200_000, 20.0, Some(1000));
         let scored = vec![
@@ -196,9 +194,7 @@ mod tests {
 
     #[test]
     fn lexicographic_tiebreak_is_stable() {
-        let mut req = NormRequest::default();
-        req.prompt_tokens_est = 100;
-        req.max_tokens = Some(100);
+        let req = NormRequest { prompt_tokens_est: 100, max_tokens: Some(100), ..Default::default() };
         // Gleicher Preis, gleiche Latenz -> Score identisch.
         let a = cand(Backend::OpenRouter, "z/model", 200_000, 1.0, Some(1000));
         let b = cand(Backend::OpenRouter, "a/model", 200_000, 1.0, Some(1000));
@@ -212,9 +208,7 @@ mod tests {
 
     #[test]
     fn omlx_wins_tiebreak_vs_openrouter() {
-        let mut req = NormRequest::default();
-        req.prompt_tokens_est = 100;
-        req.max_tokens = Some(100);
+        let req = NormRequest { prompt_tokens_est: 100, max_tokens: Some(100), ..Default::default() };
         let a = cand(Backend::OpenRouter, "same/model", 200_000, 0.0, Some(1000));
         let b = cand(Backend::OMlx, "same/model", 200_000, 0.0, Some(1000));
         let scored = vec![

@@ -90,7 +90,7 @@ mod tests {
         let p95 = t.p95_ms(Backend::OpenRouter, "m").unwrap();
         let p50 = t.p50_ms(Backend::OpenRouter, "m").unwrap();
         assert!(p95 >= 1800, "p95 was {p95}");
-        assert!(p50 >= 900 && p50 <= 1200, "p50 was {p50}");
+        assert!((900..=1200).contains(&p50), "p50 was {p50}");
         assert!(p50 < p95);
     }
 }

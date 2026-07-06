@@ -217,9 +217,7 @@ mod tests {
 
     #[test]
     fn cheap_profile_picks_cheapest_under_cap() {
-        let mut req = NormRequest::default();
-        req.prompt_tokens_est = 500;
-        req.max_tokens = Some(200);
+        let req = NormRequest { prompt_tokens_est: 500, max_tokens: Some(200), ..Default::default() };
         let registry = Registry {
             models: vec![
                 cand(Backend::OpenRouter, "a/cheap", 200_000, 1.0),
@@ -239,9 +237,7 @@ mod tests {
 
     #[test]
     fn error_when_no_candidate_survives() {
-        let mut req = NormRequest::default();
-        req.prompt_tokens_est = 1_000_000; // zu gross für alles
-        req.max_tokens = Some(200);
+        let req = NormRequest { prompt_tokens_est: 1_000_000, max_tokens: Some(200), ..Default::default() };
         let registry = Registry {
             models: vec![cand(Backend::OpenRouter, "a/cheap", 8_000, 1.0)],
         };

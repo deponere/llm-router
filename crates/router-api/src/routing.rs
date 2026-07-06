@@ -69,12 +69,12 @@ pub fn announce_decision(api: &str, profile: &ResolvedProfile, decision: &Decisi
     println!(
         "{DIM}{now}{RESET} {CYAN}→{RESET} {DIM}[{api}]{RESET} \
          {YELLOW}{profile}{RESET} → {GREEN}{BOLD}{model}{RESET} \
-         {DIM}({backend} · {tokens} tok · ~{cost:.4} $ · p95 {p95}ms · tag {tag}){RESET}{MAGENTA}{RESET}",
+         {DIM}({backend} · {tokens} tok · ~{cost:.4} $ · p95 {p95}ms · tag {tag:?}){RESET}{MAGENTA}{RESET}",
         profile = profile.name,
         model   = decision.winner.id,
         tokens  = req.prompt_tokens_est,
         cost    = cost_usd,
-        tag     = format!("{:?}", req.privacy_tag),
+        tag     = req.privacy_tag,
     );
 }
 

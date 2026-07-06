@@ -214,9 +214,7 @@ mod tests {
 
     #[test]
     fn context_filter_rejects_too_small() {
-        let mut req = NormRequest::default();
-        req.prompt_tokens_est = 100_000;
-        req.max_tokens = Some(500);
+        let req = NormRequest { prompt_tokens_est: 100_000, max_tokens: Some(500), ..Default::default() };
         let cand = candidate("x", 8_000, 1.0);
         let res = passes_all(&req, &empty_profile(), &cand);
         assert!(matches!(res, Err(FilterReason::ContextTooShort { .. })));
@@ -224,9 +222,7 @@ mod tests {
 
     #[test]
     fn price_cap_rejects_too_expensive() {
-        let mut req = NormRequest::default();
-        req.prompt_tokens_est = 100;
-        req.max_tokens = Some(10);
+        let req = NormRequest { prompt_tokens_est: 100, max_tokens: Some(10), ..Default::default() };
         let cand = candidate("x", 200_000, 20.0);
         let mut p = empty_profile();
         p.max_price_out_per_mtok = Some(5.0);
@@ -238,9 +234,7 @@ mod tests {
 
     #[test]
     fn model_hint_forces_exact_match() {
-        let mut req = NormRequest::default();
-        req.model_hint = Some("anthropic/claude-sonnet-4-6".into());
-        req.max_tokens = Some(10);
+        let req = NormRequest { model_hint: Some("anthropic/claude-sonnet-4-6".into()), max_tokens: Some(10), ..Default::default() };
         let cand = candidate("openai/gpt-5", 200_000, 1.0);
         assert!(matches!(
             passes_all(&req, &empty_profile(), &cand),
@@ -250,9 +244,7 @@ mod tests {
 
     #[test]
     fn privacy_tag_local_only_rejects_cloud() {
-        let mut req = NormRequest::default();
-        req.privacy_tag = PrivacyTag::LocalOnly;
-        req.max_tokens = Some(10);
+        let req = NormRequest { privacy_tag: PrivacyTag::LocalOnly, max_tokens: Some(10), ..Default::default() };
         let cand = candidate("openai/gpt-5", 200_000, 1.0);
         assert!(matches!(
             passes_all(&req, &empty_profile(), &cand),
@@ -272,8 +264,7 @@ mod tests {
 
     #[test]
     fn model_allowlist_filters() {
-        let mut req = NormRequest::default();
-        req.max_tokens = Some(10);
+        let req = NormRequest { max_tokens: Some(10), ..Default::default() };
         let allowed = candidate("anthropic/claude-sonnet-4-6", 200_000, 1.0);
         let blocked = candidate("openai/gpt-5", 200_000, 1.0);
         let mut p = empty_profile();
@@ -287,8 +278,7 @@ mod tests {
 
     #[test]
     fn model_denylist_filters() {
-        let mut req = NormRequest::default();
-        req.max_tokens = Some(10);
+        let req = NormRequest { max_tokens: Some(10), ..Default::default() };
         let cand = candidate("openai/gpt-3.5-turbo", 200_000, 1.0);
         let mut p = empty_profile();
         p.model_denylist = vec!["openai/gpt-3*".into()];

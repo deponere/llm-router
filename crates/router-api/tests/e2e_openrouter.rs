@@ -1,6 +1,7 @@
 //! E2E: OpenAI-Request geht rein, mocked OpenRouter antwortet.
 
 use std::sync::Arc;
+use std::str::FromStr;
 
 use router_api::state::AppState;
 use router_config::Config;

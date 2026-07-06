@@ -227,6 +227,7 @@ struct ApiArchitecture {
     #[serde(default)]
     input_modalities: Vec<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     output_modalities: Vec<String>,
 }
 

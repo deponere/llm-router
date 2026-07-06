@@ -17,6 +17,8 @@ use router_core::{Backend, NormMessage, NormRequest, NormRole};
 use serde_json::{json, Value};
 
 use crate::error::ApiError;
+
+type ByteStream = std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>>;
 use crate::routing::{announce_completion, announce_decision, announce_fallback, decide_for, headers_to_hints, parse_privacy_tag, FALLBACK_MAX_ATTEMPTS};
 use crate::state::AppState;
 
@@ -49,9 +51,7 @@ pub async fn messages(
         .chain(decision.alternatives.into_iter())
         .take(FALLBACK_MAX_ATTEMPTS)
         .collect();
-    let mut byte_stream: Option<
-        std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>>,
-    > = None;
+    let mut byte_stream: Option<ByteStream> = None;
     let mut winner = decision.winner.clone();
     let mut last_err: Option<ApiError> = None;
     while !candidates.is_empty() {
@@ -64,7 +64,7 @@ pub async fn messages(
                     .await
                     .map_err(|e| ApiError::Upstream(e.to_string()))
                     .map(|s| -> std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>> {
-                        Box::pin(s.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))))
+                        Box::pin(s.map(|r| r.map_err(std::io::Error::other)))
                     }),
                 None => Err(ApiError::Internal("OpenRouter backend not configured".into())),
             },
@@ -74,7 +74,7 @@ pub async fn messages(
                     .await
                     .map_err(|e| ApiError::Upstream(e.to_string()))
                     .map(|s| -> std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>> {
-                        Box::pin(s.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))))
+                        Box::pin(s.map(|r| r.map_err(std::io::Error::other)))
                     }),
                 None => Err(ApiError::Internal("oMLX backend not configured".into())),
             },
@@ -128,16 +128,18 @@ pub async fn messages(
 }
 
 pub fn anthropic_to_norm(body: &Value) -> Result<NormRequest, ApiError> {
-    let mut req = NormRequest::default();
-    req.model_hint = body.get("model").and_then(|v| v.as_str()).map(|s| s.to_string());
-    req.profile_hint = body
-        .get("route_profile")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    req.stream = body.get("stream").and_then(|v| v.as_bool()).unwrap_or(true);
-    req.temperature = body.get("temperature").and_then(|v| v.as_f64()).map(|x| x as f32);
-    req.top_p = body.get("top_p").and_then(|v| v.as_f64()).map(|x| x as f32);
-    req.max_tokens = body.get("max_tokens").and_then(|v| v.as_u64()).map(|x| x as u32);
+    let mut req = NormRequest {
+        model_hint: body.get("model").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        profile_hint: body
+            .get("route_profile")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        stream: body.get("stream").and_then(|v| v.as_bool()).unwrap_or(true),
+        temperature: body.get("temperature").and_then(|v| v.as_f64()).map(|x| x as f32),
+        top_p: body.get("top_p").and_then(|v| v.as_f64()).map(|x| x as f32),
+        max_tokens: body.get("max_tokens").and_then(|v| v.as_u64()).map(|x| x as u32),
+        ..Default::default()
+    };
 
     // system kann string oder array sein
     if let Some(sys) = body.get("system") {
@@ -338,8 +340,7 @@ where
         match chunk {
             Ok(b) => {
                 state.buf.extend_from_slice(&b);
-                loop {
-                    let Some(pos) = find_event_boundary(&state.buf) else { break };
+                while let Some(pos) = find_event_boundary(&state.buf) {
                     let event_bytes: Vec<u8> = state.buf.drain(..pos).collect();
                     let sep_len = if state.buf.starts_with(b"\r\n\r\n") { 4 } else { 2 };
                     state.buf.drain(..sep_len.min(state.buf.len()));

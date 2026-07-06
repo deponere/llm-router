@@ -13,6 +13,8 @@ use router_core::{Backend, NormMessage, NormRequest, NormRole};
 use serde_json::{json, Value};
 
 use crate::error::ApiError;
+
+type ByteStream = std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>>;
 use crate::routing::{announce_completion, announce_decision, announce_fallback, decide_for, headers_to_hints, parse_privacy_tag, FALLBACK_MAX_ATTEMPTS};
 use crate::state::AppState;
 
@@ -90,9 +92,7 @@ async fn dispatch_openai(
         .chain(decision.alternatives.into_iter())
         .take(FALLBACK_MAX_ATTEMPTS)
         .collect();
-    let mut byte_stream: Option<
-        std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>>,
-    > = None;
+    let mut byte_stream: Option<ByteStream> = None;
     let mut winner = decision.winner.clone();
     let mut last_err: Option<ApiError> = None;
     while !candidates.is_empty() {
@@ -171,7 +171,7 @@ async fn setup_openai_stream(
                 .await
                 .map_err(|e| ApiError::Upstream(e.to_string()))?;
             Ok(Box::pin(
-                s.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))),
+                s.map(|r| r.map_err(std::io::Error::other)),
             ))
         }
         Backend::OMlx => {
@@ -184,7 +184,7 @@ async fn setup_openai_stream(
                 .await
                 .map_err(|e| ApiError::Upstream(e.to_string()))?;
             Ok(Box::pin(
-                s.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))),
+                s.map(|r| r.map_err(std::io::Error::other)),
             ))
         }
     }
@@ -375,16 +375,18 @@ fn chrono_now() -> i64 {
 
 /// Übersetzt OpenAI-Chat-Completions-Body -> internes NormRequest.
 pub fn openai_to_norm(body: &Value) -> Result<NormRequest, ApiError> {
-    let mut req = NormRequest::default();
-    req.model_hint = body.get("model").and_then(|v| v.as_str()).map(|s| s.to_string());
-    req.profile_hint = body
-        .get("route_profile")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    req.stream = body.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
-    req.temperature = body.get("temperature").and_then(|v| v.as_f64()).map(|x| x as f32);
-    req.top_p = body.get("top_p").and_then(|v| v.as_f64()).map(|x| x as f32);
-    req.max_tokens = body.get("max_tokens").and_then(|v| v.as_u64()).map(|x| x as u32);
+    let mut req = NormRequest {
+        model_hint: body.get("model").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        profile_hint: body
+            .get("route_profile")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        stream: body.get("stream").and_then(|v| v.as_bool()).unwrap_or(false),
+        temperature: body.get("temperature").and_then(|v| v.as_f64()).map(|x| x as f32),
+        top_p: body.get("top_p").and_then(|v| v.as_f64()).map(|x| x as f32),
+        max_tokens: body.get("max_tokens").and_then(|v| v.as_u64()).map(|x| x as u32),
+        ..Default::default()
+    };
 
     if let Some(arr) = body.get("tools").and_then(|v| v.as_array()) {
         let mut tools = Vec::new();

@@ -6,6 +6,7 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
@@ -160,7 +161,7 @@ pub struct Profile {
 
     /// Hard-Filter: Modell muss einen Artificial-Analysis-Intelligence-Index
     /// >= diesem Wert haben. Modelle ohne Bewertung werden ebenfalls gefiltert.
-    /// `None` = kein Filter.
+    /// > `None` = kein Filter.
     #[serde(default)]
     pub min_intelligence_index: Option<f64>,
 }
@@ -214,14 +215,18 @@ fn default_true() -> bool {
     true
 }
 
+impl FromStr for Config {
+    type Err = ConfigError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(toml::from_str(s)?)
+    }
+}
+
 impl Config {
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
         let content = std::fs::read_to_string(path)?;
-        Self::from_str(&content)
-    }
-
-    pub fn from_str(content: &str) -> Result<Self, ConfigError> {
-        Ok(toml::from_str(content)?)
+        Ok(toml::from_str(&content)?)
     }
 
     pub fn profile(&self, name: &str) -> Option<&Profile> {
