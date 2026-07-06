@@ -328,6 +328,14 @@ where
     let msg_id = format!("msg_{}", uuid::Uuid::new_v4().simple());
     let cost_cell = std::sync::Arc::new(std::sync::Mutex::new(Option::<f64>::None));
     let cost_cell_for_closure = cost_cell.clone();
+    // Von mid_stream ans closing durchgereicht, damit die Abschluss-Events
+    // (content_block_stop / message_delta) korrekt gebaut werden können.
+    let block_open = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let block_open_mid = block_open.clone();
+    let stop_reason_cell = std::sync::Arc::new(std::sync::Mutex::new(Option::<String>::None));
+    let stop_reason_mid = stop_reason_cell.clone();
+    let out_tokens_cell = std::sync::Arc::new(std::sync::Mutex::new(Option::<u64>::None));
+    let out_tokens_mid = out_tokens_cell.clone();
 
     #[derive(Default)]
     struct State {
@@ -369,8 +377,17 @@ where
                     let Some(data) = parse_sse_data(&event_bytes) else { continue };
                     if data.trim() == "[DONE]" { continue; }
                     let Ok(v) = serde_json::from_str::<Value>(&data) else { continue };
-                    if let Some(c) = v.get("usage").and_then(|u| u.get("cost")).and_then(|x| x.as_f64()) {
-                        *cost_cell_for_closure.lock().unwrap() = Some(c);
+                    if let Some(u) = v.get("usage") {
+                        if let Some(c) = u.get("cost").and_then(|x| x.as_f64()) {
+                            *cost_cell_for_closure.lock().unwrap() = Some(c);
+                        }
+                        if let Some(ot) = u.get("completion_tokens").and_then(|x| x.as_u64()) {
+                            *out_tokens_mid.lock().unwrap() = Some(ot);
+                        }
+                    }
+                    // finish_reason → Anthropic stop_reason fürs abschließende message_delta.
+                    if let Some(fr) = v["choices"].get(0).and_then(|c| c.get("finish_reason")).and_then(|x| x.as_str()) {
+                        *stop_reason_mid.lock().unwrap() = Some(map_stop_reason(fr).to_string());
                     }
                     let delta_text = v["choices"]
                         .get(0)
@@ -379,8 +396,6 @@ where
                         .and_then(|x| x.as_str())
                         .unwrap_or("")
                         .to_string();
-                    // finish_reason aus OpenAI ignorieren wir für Anthropic-Stream,
-                    // weil `message_stop` bereits impliziert, dass der Stream endet.
                     if !state.started {
                         state.started = true;
                     }
@@ -395,6 +410,7 @@ where
                                 }),
                             )));
                             state.block_started = true;
+                            block_open_mid.store(true, std::sync::atomic::Ordering::SeqCst);
                         }
                         events.push(Ok(sse_event(
                             "content_block_delta",
@@ -417,15 +433,23 @@ where
         futures::stream::iter(events)
     });
 
-    // Abschluss-Events sammeln wir nach dem inneren Stream.
+    // Abschluss-Sequenz nach Anthropic-Spec: (content_block_stop) → message_delta → message_stop.
     let closing = futures::stream::once(async move {
         let cost = *cost_cell.lock().unwrap();
         on_done(started.elapsed(), cost);
-        Ok(sse_event(
-            "message_stop",
-            json!({ "type": "message_stop" }),
-        ))
-    });
+        let stop_reason = stop_reason_cell
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(|| "end_turn".to_string());
+        let output_tokens = out_tokens_cell.lock().unwrap().unwrap_or(0);
+        let block_open = block_open.load(std::sync::atomic::Ordering::SeqCst);
+        closing_events(block_open, &stop_reason, output_tokens)
+            .into_iter()
+            .map(|(name, payload)| Ok(sse_event(name, payload)))
+            .collect::<Vec<Result<Event, std::convert::Infallible>>>()
+    })
+    .flat_map(futures::stream::iter);
 
     futures::stream::once(started_event).chain(mid_stream).chain(closing)
 }
@@ -450,6 +474,35 @@ fn parse_sse_data(bytes: &[u8]) -> Option<String> {
 
 fn sse_event(name: &str, payload: Value) -> Event {
     Event::default().event(name).data(payload.to_string())
+}
+
+/// OpenAI-`finish_reason` → Anthropic-`stop_reason`.
+fn map_stop_reason(openai: &str) -> &'static str {
+    match openai {
+        "length" => "max_tokens",
+        "tool_calls" | "function_call" => "tool_use",
+        _ => "end_turn",
+    }
+}
+
+/// Baut die Abschluss-Event-Sequenz eines `/v1/messages`-Streams nach
+/// Anthropic-Spec: `content_block_stop` (nur wenn ein Block geöffnet wurde),
+/// dann `message_delta` (mit `stop_reason` + `usage`), dann `message_stop`.
+fn closing_events(block_open: bool, stop_reason: &str, output_tokens: u64) -> Vec<(&'static str, Value)> {
+    let mut ev = Vec::new();
+    if block_open {
+        ev.push(("content_block_stop", json!({ "type": "content_block_stop", "index": 0 })));
+    }
+    ev.push((
+        "message_delta",
+        json!({
+            "type": "message_delta",
+            "delta": { "stop_reason": stop_reason, "stop_sequence": null },
+            "usage": { "output_tokens": output_tokens }
+        }),
+    ));
+    ev.push(("message_stop", json!({ "type": "message_stop" })));
+    ev
 }
 
 /// Baut aus einem abgesammelten OpenAI-Completion-Stream einen
@@ -523,6 +576,31 @@ mod tests {
         assert_eq!(v["content"][0]["type"], "text");
         assert_eq!(v["content"][0]["text"], "hi");
         assert_eq!(v["stop_reason"], "end_turn");
+    }
+
+    #[test]
+    fn closing_sequence_with_open_block() {
+        let ev = closing_events(true, "end_turn", 7);
+        let names: Vec<&str> = ev.iter().map(|(n, _)| *n).collect();
+        assert_eq!(names, ["content_block_stop", "message_delta", "message_stop"]);
+        assert_eq!(ev[1].1["delta"]["stop_reason"], "end_turn");
+        assert_eq!(ev[1].1["usage"]["output_tokens"], 7);
+    }
+
+    #[test]
+    fn closing_sequence_without_block_skips_block_stop() {
+        // Reines Tool-/Leer-Ergebnis: kein content_block_start → kein content_block_stop.
+        let ev = closing_events(false, "tool_use", 0);
+        let names: Vec<&str> = ev.iter().map(|(n, _)| *n).collect();
+        assert_eq!(names, ["message_delta", "message_stop"]);
+    }
+
+    #[test]
+    fn stop_reason_mapping() {
+        assert_eq!(map_stop_reason("length"), "max_tokens");
+        assert_eq!(map_stop_reason("tool_calls"), "tool_use");
+        assert_eq!(map_stop_reason("stop"), "end_turn");
+        assert_eq!(map_stop_reason("whatever"), "end_turn");
     }
 
     #[test]
