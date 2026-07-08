@@ -5,43 +5,128 @@
 [server]
 bind = "127.0.0.1:4000"
 
+# Backends: beliebig viele benannte Instanzen. Der Tabellen-Key (z. B.
+# "openrouter") ist die Backend-ID und erscheint als `backend` an jedem Modell,
+# im Routing-Trace und in backend_allowlist/Profilen.
+#
+# kind:
+#   openai_compat  jeder Server mit {base_url}/models + /chat/completions (SSE)
+#   openrouter     Aggregator (reiches /models-Schema + provider-Block)
+#   anthropic      nativ /v1/messages (Egress-Client übersetzt OpenAI <-> Anthropic)
+# auth:
+#   { type = "none" }                          lokale Server ohne Key
+#   { type = "api_key", env = "ENV_NAME" }     Secret aus Umgebungsvariable
+# base_url: voller Prefix inkl. Versionssegment (der Client hängt /models an).
+# local = true: gewinnt bei Score-Gleichstand, Privacy-Klasse Local.
+#
+# Hinweis: generische openai_compat/anthropic-Backends liefern keine Preise
+# (cost-Term = gratis). Für preisbewusstes Routing OpenRouter nutzen, das die
+# Pricing-Metadaten mitliefert.
+
 [backends.openrouter]
 enabled = true
-api_key_env = "OPENROUTER_API_KEY"
+kind = "openrouter"
 base_url = "https://openrouter.ai/api/v1"
+auth = { type = "api_key", env = "OPENROUTER_API_KEY" }
 # HTTP-Referer und X-Title sind optional, erscheinen in OpenRouter-Stats.
 app_referer = "https://localhost/router"
 app_title = "deponere_router"
 
+# --- Lokale Backends (alle OpenAI-kompatibel) — nach Bedarf aktivieren ---
+
 [backends.omlx]
 enabled = true
-base_url_env = "OMLX_HOST"
-base_url_default = "http://127.0.0.1:8000"
-api_key_env = "OMLX_API_KEY"
+kind = "openai_compat"
+base_url = "http://127.0.0.1:8000/v1"
+auth = { type = "none" }
+local = true
+
+[backends.ollama]
+enabled = false
+kind = "openai_compat"
+base_url = "http://localhost:11434/v1"
+auth = { type = "none" }
+local = true
+
+[backends.lmstudio]
+enabled = false
+kind = "openai_compat"
+base_url = "http://localhost:1234/v1"
+auth = { type = "none" }
+local = true
+
+# --- Direkte Cloud-Provider (eigene Keys, kein Aggregator) ---
+# Alle disabled-by-default; aktivieren + passenden API-Key exportieren.
+
+[backends.openai]
+enabled = false
+kind = "openai_compat"
+base_url = "https://api.openai.com/v1"
+auth = { type = "api_key", env = "OPENAI_API_KEY" }
+
+[backends.anthropic]
+enabled = false
+kind = "anthropic"
+base_url = "https://api.anthropic.com/v1"
+auth = { type = "api_key", env = "ANTHROPIC_API_KEY" }
+# anthropic_version = "2023-06-01"  # optional override
+
+[backends.gemini]
+enabled = false
+kind = "openai_compat"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+auth = { type = "api_key", env = "GEMINI_API_KEY" }
+
+[backends.groq]
+enabled = false
+kind = "openai_compat"
+base_url = "https://api.groq.com/openai/v1"
+auth = { type = "api_key", env = "GROQ_API_KEY" }
+
+[backends.deepseek]
+enabled = false
+kind = "openai_compat"
+base_url = "https://api.deepseek.com/v1"
+auth = { type = "api_key", env = "DEEPSEEK_API_KEY" }
+
+[backends.xai]
+enabled = false
+kind = "openai_compat"
+base_url = "https://api.x.ai/v1"
+auth = { type = "api_key", env = "XAI_API_KEY" }
+
+[backends.mistral]
+enabled = false
+kind = "openai_compat"
+base_url = "https://api.mistral.ai/v1"
+auth = { type = "api_key", env = "MISTRAL_API_KEY" }
+
+# OAuth ist noch nicht implementiert (Phase 6). Wenn ein Provider es braucht,
+# wird AuthConfig um eine `oauth`-Variante mit Token-Refresh erweitert.
 
 # Overlay ueber die vom jeweiligen Backend gelieferten Modell-Metadaten.
 # Wird gebraucht, wenn /v1/models keine oder unvollstaendige Capability-Angaben
 # liefert.
 [[registry.overrides]]
-backend = "OMlx"
+backend = "omlx"
 id_prefix = "qwen3"
 input_modalities = ["text"]
 caps = ["tools"]
 
 [[registry.overrides]]
-backend = "OMlx"
+backend = "omlx"
 id_prefix = "qwen2.5-coder"
 input_modalities = ["text"]
 caps = ["tools"]
 
 [[registry.overrides]]
-backend = "OMlx"
+backend = "omlx"
 id_prefix = "llama-3.3"
 input_modalities = ["text"]
 caps = ["tools"]
 
 [[registry.overrides]]
-backend = "OMlx"
+backend = "omlx"
 id_prefix = "qwen2.5-vl"
 input_modalities = ["text", "image"]
 caps = []
@@ -142,7 +227,7 @@ provider_require_parameters = true
 
 [profiles.local]
 weights = { cost = 0.0, latency = 0.5, context = 0.2, preference = 0.3 }
-backend_allowlist = ["OMlx"]
+backend_allowlist = ["omlx"]
 preferences = [
     "qwen3-32b",
     "llama-3.3-70b",

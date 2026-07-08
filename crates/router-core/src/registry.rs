@@ -4,34 +4,6 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Backend {
-    OpenRouter,
-    OMlx,
-}
-
-impl Backend {
-    /// Deterministische Reihenfolge für den Tiebreak im Scoring.
-    /// Niedriger = bevorzugt bei Gleichstand.
-    pub fn tiebreak_priority(self) -> u8 {
-        match self {
-            Backend::OMlx => 0, // lokal gewinnt bei Gleichstand
-            Backend::OpenRouter => 1,
-        }
-    }
-}
-
-impl FromStr for Backend {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_ascii_lowercase().as_str() {
-            "openrouter" => Ok(Backend::OpenRouter),
-            "omlx" => Ok(Backend::OMlx),
-            _ => Err(format!("unknown backend: {s}")),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ModalitySet {
     bits: u8,
@@ -148,7 +120,12 @@ impl FromStr for PrivacyClass {
 
 #[derive(Debug, Clone)]
 pub struct ModelCandidate {
-    pub backend: Backend,
+    /// Name der Backend-Instanz aus der Config (z. B. "openai", "groq",
+    /// "anthropic", "omlx", "openrouter"). Schlüssel für Dispatch + Metrics.
+    pub backend_id: String,
+    /// Deterministischer Tiebreak bei Score-Gleichstand: niedriger gewinnt.
+    /// Lokale Backends bekommen 0, damit sie bei Gleichstand bevorzugt werden.
+    pub tiebreak_priority: u8,
     /// Backend-spezifischer Modell-Identifier.
     pub id: String,
     /// Der Teil vor dem `/` in OpenRouter-IDs bzw. `omlx` für lokale Modelle.
@@ -181,9 +158,9 @@ impl Registry {
         self.models.iter()
     }
 
-    /// Suche nach Backend + exakte ID.
-    pub fn find(&self, backend: Backend, id: &str) -> Option<&ModelCandidate> {
-        self.models.iter().find(|m| m.backend == backend && m.id == id)
+    /// Suche nach Backend-ID + exakte Modell-ID.
+    pub fn find(&self, backend_id: &str, id: &str) -> Option<&ModelCandidate> {
+        self.models.iter().find(|m| m.backend_id == backend_id && m.id == id)
     }
 }
 
@@ -209,8 +186,4 @@ mod tests {
         assert!(!supports.covers(needed_audio));
     }
 
-    #[test]
-    fn tiebreak_omlx_wins() {
-        assert!(Backend::OMlx.tiebreak_priority() < Backend::OpenRouter.tiebreak_priority());
-    }
 }

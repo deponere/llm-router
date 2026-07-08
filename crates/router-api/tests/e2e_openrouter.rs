@@ -18,15 +18,12 @@ async fn start_app(mock_url: String) -> (tokio::task::JoinHandle<()>, String) {
 
         [backends.openrouter]
         enabled = true
-        api_key_env = "TEST_OR_KEY"
+        kind = "openrouter"
         base_url = "{mock_url}"
-
-        [backends.omlx]
-        enabled = false
-        base_url_default = "http://127.0.0.1:65534"
+        auth = {{ type = "api_key", env = "TEST_OR_KEY" }}
 
         [[registry.overrides]]
-        backend = "OMlx"
+        backend = "omlx"
         id_prefix = ""
         input_modalities = []
         caps = []

@@ -30,7 +30,7 @@ pub async fn transactions(
 ///
 ///   - `sort=intelligence|cost|tps|ttft|none`  (default `intelligence`)
 ///   - `min_intelligence=NN`                  (Filter, z. B. 50)
-///   - `backend=OpenRouter|OMlx`              (Filter)
+///   - `backend=openrouter|omlx|…`           (Filter, case-insensitiv)
 ///   - `limit=N`                              (Default 100)
 ///   - `unrated=true|false`                   (Default false → Modelle ohne AA-Score ausblenden)
 pub async fn intelligence(
@@ -67,7 +67,7 @@ pub async fn intelligence(
     let mut rows: Vec<Value> = Vec::new();
     for m in snap.models.iter() {
         if let Some(b) = &backend_filter {
-            if format!("{:?}", m.backend) != *b { continue; }
+            if !m.backend_id.eq_ignore_ascii_case(b) { continue; }
         }
         let aa_slug = aa.aa_slug_for(&m.id);
         let scores = aa.lookup(&aa_index, &m.id);
@@ -78,7 +78,7 @@ pub async fn intelligence(
         }
         rows.push(json!({
             "router_id":           m.id,
-            "backend":             format!("{:?}", m.backend),
+            "backend":             m.backend_id,
             "aa_slug":             aa_slug,
             "rated":               intel.is_some(),
             "intelligence_index":  intel,
@@ -202,7 +202,7 @@ pub async fn explain(
 
     Ok(Json(json!({
         "winner": decision.winner.id,
-        "winner_backend": format!("{:?}", decision.winner.backend),
+        "winner_backend": decision.winner.backend_id,
         "profile": profile.name,
         "weights": {
             "cost":       profile.weights.cost,
@@ -219,7 +219,7 @@ pub async fn explain(
             "require_privacy_class":  profile.require_privacy_class.iter()
                                           .map(|c| format!("{c:?}")).collect::<Vec<_>>(),
             "backend_allowlist":      profile.backend_allowlist.iter()
-                                          .map(|b| format!("{b:?}")).collect::<Vec<_>>(),
+                                          .cloned().collect::<Vec<_>>(),
         },
         "request": {
             "format":              format,
@@ -253,7 +253,7 @@ fn candidate_to_json(m: &ModelCandidate) -> Value {
     };
     json!({
         "id":                    m.id,
-        "backend":               format!("{:?}", m.backend),
+        "backend":               m.backend_id,
         "provider":              m.provider_slug,
         "context_length":        m.context_length,
         "max_completion_tokens": m.max_completion_tokens,

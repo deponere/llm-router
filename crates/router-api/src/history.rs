@@ -34,7 +34,7 @@ impl TransactionHistory {
     pub fn new() -> Self {
         Self(Arc::new(Mutex::new(Inner {
             entries: VecDeque::with_capacity(CAPACITY),
-            session_start_unix: unix_now(),
+            session_start_unix: now_unix(),
         })))
     }
 
@@ -98,11 +98,13 @@ fn totals_since(entries: &VecDeque<Transaction>, since: u64) -> Totals {
     Totals { cost_usd: cost, count }
 }
 
-fn unix_now() -> u64 {
+/// Aktuelle Unix-Zeit in Sekunden. Geteilt von den Handlern fürs
+/// Transaction-Logging.
+pub fn now_unix() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
 fn unix_utc_day_start() -> u64 {
-    let now = unix_now();
+    let now = now_unix();
     now - (now % 86_400)
 }

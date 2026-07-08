@@ -2,10 +2,13 @@
 //! konkreten Backends kapseln.
 
 use router_core::{
-    decide, profile::ResolvedProfile, registry::Registry, Decision, NormRequest,
+    decide, profile::ResolvedProfile, registry::Registry, Decision, ModelCandidate, NormRequest,
 };
+use serde_json::Value;
 
 use crate::error::ApiError;
+use crate::sse::ByteStream;
+use crate::state::AppState;
 
 pub fn decide_for(
     req: &NormRequest,
@@ -51,7 +54,7 @@ pub fn announce_decision(api: &str, profile: &ResolvedProfile, decision: &Decisi
     const GREEN: &str = "\x1b[32m";
     const MAGENTA:&str = "\x1b[35m";
 
-    let backend = format!("{:?}", decision.winner.backend);
+    let backend = decision.winner.backend_id.clone();
     let cost_usd = decision
         .trace
         .ranked
@@ -96,6 +99,54 @@ pub fn announce_fallback(api: &str, failed: &str, next: &str, error: &str) {
 /// Maximale Anzahl von Modellen, die der Router pro Request durchprobiert,
 /// bevor er den letzten Upstream-Fehler an den Caller zurückreicht.
 pub const FALLBACK_MAX_ATTEMPTS: usize = 3;
+
+/// Öffnet den Byte-Stream eines einzelnen Kandidaten beim passenden Backend.
+async fn open_stream(
+    state: &AppState,
+    profile: &ResolvedProfile,
+    cand: &ModelCandidate,
+    body: Value,
+) -> Result<ByteStream, ApiError> {
+    let provider = state.registry.provider(&cand.backend_id).ok_or_else(|| {
+        ApiError::Internal(format!("backend not configured: {}", cand.backend_id))
+    })?;
+    provider
+        .chat_completion_stream(&cand.id, profile, body)
+        .await
+        .map_err(|e| ApiError::Upstream(e.to_string()))
+}
+
+/// Probiert Winner + Alternativen der Reihe nach durch, bis ein Backend-Stream
+/// aufgeht. `make_body` baut den Upstream-Body pro Kandidat (OpenAI reicht den
+/// Original-Body durch, Anthropic übersetzt erst nach OpenAI-Schema).
+pub(crate) async fn stream_with_fallback(
+    state: &AppState,
+    profile: &ResolvedProfile,
+    decision: Decision,
+    api: &str,
+    make_body: impl Fn(&ModelCandidate) -> Value,
+) -> Result<(ModelCandidate, ByteStream), ApiError> {
+    let mut candidates: Vec<ModelCandidate> = std::iter::once(decision.winner)
+        .chain(decision.alternatives)
+        .take(FALLBACK_MAX_ATTEMPTS)
+        .collect();
+    let mut last_err: Option<ApiError> = None;
+    while !candidates.is_empty() {
+        let cand = candidates.remove(0);
+        match open_stream(state, profile, &cand, make_body(&cand)).await {
+            Ok(s) => return Ok((cand, s)),
+            Err(e) => {
+                let next = candidates
+                    .first()
+                    .map(|c| c.id.clone())
+                    .unwrap_or_else(|| "<none>".into());
+                announce_fallback(api, &cand.id, &next, &e.to_string());
+                last_err = Some(e);
+            }
+        }
+    }
+    Err(last_err.unwrap_or_else(|| ApiError::Internal("no candidates available".into())))
+}
 
 /// Druckt eine Abschluss-Zeile mit Gesamtdauer (und ggf. Ist-Kosten) auf stdout.
 pub fn announce_completion(

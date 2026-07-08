@@ -1,30 +1,31 @@
-//! Gemergter Modell-Katalog. Fetcht von OpenRouter + oMLX, legt das Ergebnis
-//! in einen `moka`-TTL-Cache und reicht es als Snapshot (`Registry`) raus.
+//! Gemergter Modell-Katalog. Fetcht von allen konfigurierten Backends, legt
+//! das Ergebnis in einen `moka`-TTL-Cache und reicht es als Snapshot
+//! (`Registry`) raus.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use moka::future::Cache;
-use router_config::{Config, RegistryConfig};
-use router_core::registry::{Backend, ModelCandidate, PrivacyClass, Registry};
+use router_config::{BackendConfig, BackendKind, Config, RegistryConfig};
+use router_core::registry::{ModelCandidate, Registry};
 
 use crate::artificial_analysis::ArtificialAnalysisClient;
 use crate::metrics::LatencyTracker;
-use crate::omlx::OMlxClient;
+use crate::anthropic::AnthropicClient;
+use crate::openai_compat::OpenAiCompatClient;
 use crate::openrouter::OpenRouterClient;
+use crate::provider::Provider;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RegistryError {
-    #[error("openrouter: {0}")]
-    OpenRouter(#[from] crate::openrouter::OpenRouterError),
-    #[error("omlx: {0}")]
-    OMlx(#[from] crate::omlx::OMlxError),
+    #[error("provider: {0}")]
+    Provider(#[from] crate::provider::ProviderError),
 }
 
 #[derive(Clone)]
 pub struct RegistryHandle {
-    openrouter: Option<OpenRouterClient>,
-    omlx: Option<OMlxClient>,
+    providers: BTreeMap<String, Arc<dyn Provider>>,
     registry_cfg: RegistryConfig,
     cache: Cache<&'static str, Arc<Registry>>,
     tracker: LatencyTracker,
@@ -35,26 +36,19 @@ const CACHE_KEY: &str = "registry";
 
 impl RegistryHandle {
     pub fn new(config: &Config, tracker: LatencyTracker) -> Self {
-        let openrouter = config
+        let providers: BTreeMap<String, Arc<dyn Provider>> = config
             .backends
-            .openrouter
-            .as_ref()
-            .filter(|c| c.enabled)
-            .map(OpenRouterClient::new);
-        let omlx = config
-            .backends
-            .omlx
-            .as_ref()
-            .filter(|c| c.enabled)
-            .map(OMlxClient::new);
+            .iter()
+            .filter(|(_, c)| c.enabled)
+            .filter_map(|(id, c)| build_provider(id, c).map(|p| (id.clone(), p)))
+            .collect();
         let cache = Cache::builder()
             .max_capacity(1)
             .time_to_live(Duration::from_secs(5 * 60))
             .build();
         let aa = ArtificialAnalysisClient::new(&config.registry.intelligence);
         Self {
-            openrouter,
-            omlx,
+            providers,
             registry_cfg: config.registry.clone(),
             cache,
             tracker,
@@ -62,8 +56,10 @@ impl RegistryHandle {
         }
     }
 
-    pub fn openrouter(&self) -> Option<&OpenRouterClient> { self.openrouter.as_ref() }
-    pub fn omlx(&self) -> Option<&OMlxClient> { self.omlx.as_ref() }
+    /// Provider-Instanz für eine Backend-ID (Dispatch im Egress).
+    pub fn provider(&self, backend_id: &str) -> Option<&Arc<dyn Provider>> {
+        self.providers.get(backend_id)
+    }
     pub fn tracker(&self) -> &LatencyTracker { &self.tracker }
     pub fn artificial_analysis(&self) -> &ArtificialAnalysisClient { &self.aa }
 
@@ -75,7 +71,7 @@ impl RegistryHandle {
             .await
             .map_err(|e: Arc<RegistryError>| match Arc::try_unwrap(e) {
                 Ok(err) => err,
-                Err(arc) => RegistryError::OpenRouter(crate::openrouter::OpenRouterError::Upstream {
+                Err(arc) => RegistryError::Provider(crate::provider::ProviderError::Upstream {
                     status: 0,
                     body: format!("{arc}"),
                 }),
@@ -86,22 +82,12 @@ impl RegistryHandle {
 
     async fn build(&self) -> Result<Registry, RegistryError> {
         let mut models: Vec<ModelCandidate> = Vec::new();
-        if let Some(or) = &self.openrouter {
-            match or.list_models().await {
-                Ok(mut list) => {
-                    apply_privacy_overlay(&mut list, &self.registry_cfg);
-                    models.append(&mut list);
-                }
-                Err(e) => {
-                    tracing::warn!(error=%e, "openrouter catalog fetch failed, continuing without");
-                }
-            }
-        }
-        if let Some(ol) = &self.omlx {
-            match ol.list_models(&self.registry_cfg).await {
+        // Ein fehlschlagendes Backend darf den Gesamtkatalog nicht kippen.
+        for (id, provider) in &self.providers {
+            match provider.list_models(&self.registry_cfg).await {
                 Ok(mut list) => models.append(&mut list),
                 Err(e) => {
-                    tracing::warn!(error=%e, "omlx catalog fetch failed, continuing without");
+                    tracing::warn!(backend=%id, error=%e, "catalog fetch failed, continuing without");
                 }
             }
         }
@@ -111,7 +97,7 @@ impl RegistryHandle {
     fn attach_metrics(&self, reg: &Registry) -> Registry {
         let mut out = reg.clone();
         for m in &mut out.models {
-            m.measured_p95_ms = self.tracker.p95_ms(m.backend, &m.id);
+            m.measured_p95_ms = self.tracker.p95_ms(&m.backend_id, &m.id);
         }
         out
     }
@@ -140,16 +126,12 @@ impl RegistryHandle {
     }
 }
 
-fn apply_privacy_overlay(models: &mut [ModelCandidate], cfg: &RegistryConfig) {
-    for m in models.iter_mut() {
-        if m.backend == Backend::OpenRouter {
-            if cfg.privacy.local.iter().any(|s| s == &m.provider_slug) {
-                m.privacy_class = PrivacyClass::Local;
-            } else if cfg.privacy.zdr.iter().any(|s| s == &m.provider_slug) {
-                m.privacy_class = PrivacyClass::Zdr;
-            } else {
-                m.privacy_class = PrivacyClass::Standard;
-            }
-        }
+/// Baut die passende Provider-Impl für eine Backend-Instanz. Gibt `None`, wenn
+/// der Kind (noch) nicht unterstützt wird.
+fn build_provider(id: &str, cfg: &BackendConfig) -> Option<Arc<dyn Provider>> {
+    match cfg.kind {
+        BackendKind::OpenaiCompat => Some(Arc::new(OpenAiCompatClient::new(id, cfg))),
+        BackendKind::Openrouter => Some(Arc::new(OpenRouterClient::new(id, cfg))),
+        BackendKind::Anthropic => Some(Arc::new(AnthropicClient::new(id, cfg))),
     }
 }

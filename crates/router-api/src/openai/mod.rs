@@ -9,13 +9,13 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::stream::StreamExt;
 use futures::Stream;
-use router_core::{Backend, NormMessage, NormRequest, NormRole};
+use router_core::{NormMessage, NormRequest, NormRole};
 use serde_json::{json, Value};
 
 use crate::error::ApiError;
-
-type ByteStream = std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>>;
-use crate::routing::{announce_completion, announce_decision, announce_fallback, decide_for, headers_to_hints, parse_privacy_tag, FALLBACK_MAX_ATTEMPTS};
+use crate::history::now_unix;
+use crate::routing::{announce_completion, announce_decision, decide_for, headers_to_hints, parse_privacy_tag, stream_with_fallback};
+use crate::sse::{find_event_boundary, parse_sse_data};
 use crate::state::AppState;
 
 /// `GET /v1/models` — Union aus gemergter Registry.
@@ -29,9 +29,12 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Json<Value>, A
         .models
         .iter()
         .map(|m| {
-            let owned_by = match m.backend {
-                Backend::OpenRouter => m.provider_slug.clone(),
-                Backend::OMlx => "omlx".to_string(),
+            // OpenRouter-IDs tragen den echten Anbieter im Slug (z. B. "anthropic");
+            // für alle anderen Backends ist die Backend-Instanz der Eigentümer.
+            let owned_by = if m.backend_id == "openrouter" {
+                m.provider_slug.clone()
+            } else {
+                m.backend_id.clone()
             };
             json!({
                 "id": m.id,
@@ -44,7 +47,7 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Json<Value>, A
                     "completion_per_mtok": m.price_out_per_mtok,
                 },
                 "privacy_class": format!("{:?}", m.privacy_class),
-                "backend": format!("{:?}", m.backend),
+                "backend": m.backend_id,
             })
         })
         .collect();
@@ -88,35 +91,9 @@ async fn dispatch_openai(
     let stream = norm.stream;
     let started = Instant::now();
 
-    let mut candidates: Vec<router_core::ModelCandidate> = std::iter::once(decision.winner.clone())
-        .chain(decision.alternatives.into_iter())
-        .take(FALLBACK_MAX_ATTEMPTS)
-        .collect();
-    let mut byte_stream: Option<ByteStream> = None;
-    let mut winner = decision.winner.clone();
-    let mut last_err: Option<ApiError> = None;
-    while !candidates.is_empty() {
-        let cand = candidates.remove(0);
-        let attempt = setup_openai_stream(&state, &profile, &cand, original_body.clone()).await;
-        match attempt {
-            Ok(s) => {
-                winner = cand;
-                byte_stream = Some(s);
-                break;
-            }
-            Err(e) => {
-                let next = candidates
-                    .first()
-                    .map(|c| c.id.clone())
-                    .unwrap_or_else(|| "<none>".into());
-                announce_fallback("openai", &cand.id, &next, &e.to_string());
-                last_err = Some(e);
-            }
-        }
-    }
-    let byte_stream = byte_stream.ok_or_else(|| {
-        last_err.unwrap_or_else(|| ApiError::Internal("no candidates available".into()))
-    })?;
+    let (winner, byte_stream) =
+        stream_with_fallback(&state, &profile, decision, "openai", |_| original_body.clone())
+            .await?;
 
     if stream {
         let event_stream = sse_from_bytes(
@@ -124,7 +101,7 @@ async fn dispatch_openai(
             state.tracker.clone(),
             state.history.clone(),
             profile.name.clone(),
-            winner.backend,
+            winner.backend_id.clone(),
             winner.id.clone(),
             started,
         );
@@ -133,14 +110,14 @@ async fn dispatch_openai(
     } else {
         let bytes = collect_stream(byte_stream).await?;
         let elapsed = started.elapsed();
-        state.tracker.record(winner.backend, &winner.id, elapsed);
+        state.tracker.record(&winner.backend_id, &winner.id, elapsed);
         let cost = scan_cost_in_sse(&bytes);
         announce_completion("openai", &winner.id, elapsed, cost);
         state.history.record(crate::history::Transaction {
             unix_ts: now_unix(),
             api: "openai".into(),
             profile: profile.name.clone(),
-            backend: format!("{:?}", winner.backend),
+            backend: winner.backend_id.clone(),
             model_id: winner.id.clone(),
             duration_ms: elapsed.as_millis() as u64,
             cost_usd: cost,
@@ -151,51 +128,12 @@ async fn dispatch_openai(
     }
 }
 
-async fn setup_openai_stream(
-    state: &AppState,
-    profile: &router_core::ResolvedProfile,
-    cand: &router_core::ModelCandidate,
-    body: Value,
-) -> Result<
-    std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>>,
-    ApiError,
-> {
-    match cand.backend {
-        Backend::OpenRouter => {
-            let client = state
-                .registry
-                .openrouter()
-                .ok_or_else(|| ApiError::Internal("OpenRouter backend not configured".into()))?;
-            let s = client
-                .chat_completion_stream(&cand.id, profile, body)
-                .await
-                .map_err(|e| ApiError::Upstream(e.to_string()))?;
-            Ok(Box::pin(
-                s.map(|r| r.map_err(std::io::Error::other)),
-            ))
-        }
-        Backend::OMlx => {
-            let client = state
-                .registry
-                .omlx()
-                .ok_or_else(|| ApiError::Internal("oMLX backend not configured".into()))?;
-            let s = client
-                .chat_completion_stream(&cand.id, body)
-                .await
-                .map_err(|e| ApiError::Upstream(e.to_string()))?;
-            Ok(Box::pin(
-                s.map(|r| r.map_err(std::io::Error::other)),
-            ))
-        }
-    }
-}
-
 fn sse_from_bytes<S>(
     inner: S,
     tracker: router_providers::LatencyTracker,
     history: crate::history::TransactionHistory,
     profile_name: String,
-    backend: Backend,
+    backend_id: String,
     model_id: String,
     started: Instant,
 ) -> impl Stream<Item = Result<Event, std::convert::Infallible>>
@@ -236,24 +174,23 @@ where
     // Bei Stream-Ende Latenz messen (via `then` + Async-Klon).
     s.chain(futures::stream::once(async move {
         let elapsed = started.elapsed();
-        tracker.record(backend, &model_id, elapsed);
+        tracker.record(&backend_id, &model_id, elapsed);
         let cost = *cost_cell.lock().unwrap();
         crate::routing::announce_completion("openai", &model_id, elapsed, cost);
         history.record(crate::history::Transaction {
             unix_ts: now_unix(),
             api: "openai".into(),
             profile: profile_name,
-            backend: format!("{backend:?}"),
+            backend: backend_id.clone(),
             model_id: model_id.clone(),
             duration_ms: elapsed.as_millis() as u64,
             cost_usd: cost,
         });
-        Ok(Event::default().data("[DONE-stamp]"))
+        // SSE-Comment (`: ...`) statt eines `data:`-Events: trägt keine Nutzlast,
+        // die ein Client als JSON fehlinterpretieren könnte. `data: [DONE]` kam
+        // bereits vom Upstream (OpenRouter/oMLX).
+        Ok(Event::default().comment("done"))
     }))
-    // Letzten Trailer-Event filtern wir auf der Leitung aus, aber Clients erwarten
-    // ohnehin `data: [DONE]` — den emittieren sowohl OpenRouter als auch unser
-    // oMLX. Der Trailer-Event mit "[DONE-stamp]" wird von den meisten
-    // Clients ignoriert.
 }
 
 /// Sucht in einem JSON-Fragment (SSE-Datablock oder aggregiertem Body) nach
@@ -282,24 +219,6 @@ fn scan_cost_in_sse(raw: &[u8]) -> Option<f64> {
         }
     }
     last
-}
-
-fn find_event_boundary(buf: &[u8]) -> Option<usize> {
-    buf.windows(2).position(|w| w == b"\n\n").or_else(|| {
-        buf.windows(4).position(|w| w == b"\r\n\r\n")
-    })
-}
-
-fn parse_sse_data(bytes: &[u8]) -> Option<String> {
-    let text = std::str::from_utf8(bytes).ok()?;
-    let mut data = String::new();
-    for line in text.lines() {
-        if let Some(rest) = line.strip_prefix("data: ").or_else(|| line.strip_prefix("data:")) {
-            if !data.is_empty() { data.push('\n'); }
-            data.push_str(rest);
-        }
-    }
-    if data.is_empty() { None } else { Some(data) }
 }
 
 pub(crate) async fn collect_stream<S>(mut stream: S) -> Result<Vec<u8>, ApiError>
@@ -430,7 +349,7 @@ fn aggregate_openai_sse(raw: &[u8], model_id: &str) -> Result<Value, String> {
     Ok(json!({
         "id": format!("chatcmpl-{}", uuid::Uuid::new_v4().simple()),
         "object": "chat.completion",
-        "created": chrono_now(),
+        "created": now_unix() as i64,
         "model": model_id,
         "choices": [{
             "index": 0,
@@ -443,20 +362,6 @@ fn aggregate_openai_sse(raw: &[u8], model_id: &str) -> Result<Value, String> {
             "total_tokens": acc.prompt_tokens.unwrap_or(0) + acc.completion_tokens.unwrap_or(0),
         },
     }))
-}
-
-fn now_unix() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
-
-fn chrono_now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
 }
 
 /// Übersetzt OpenAI-Chat-Completions-Body -> internes NormRequest.

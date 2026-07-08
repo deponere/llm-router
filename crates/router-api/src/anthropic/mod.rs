@@ -11,16 +11,15 @@ use axum::http::HeaderMap;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use futures::stream::StreamExt;
 use futures::Stream;
-use router_core::{Backend, NormMessage, NormRequest, NormRole};
+use router_core::{NormMessage, NormRequest, NormRole};
 use serde_json::{json, Value};
 
 use crate::error::ApiError;
-
-type ByteStream = std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>>;
+use crate::history::now_unix;
 use crate::openai::{accumulate_completion, collect_stream, Accumulated};
-use crate::routing::{announce_completion, announce_decision, announce_fallback, decide_for, headers_to_hints, parse_privacy_tag, FALLBACK_MAX_ATTEMPTS};
+use crate::routing::{announce_completion, announce_decision, decide_for, headers_to_hints, parse_privacy_tag, stream_with_fallback};
+use crate::sse::{find_event_boundary, parse_sse_data};
 use crate::state::AppState;
 
 pub async fn messages(
@@ -48,57 +47,14 @@ pub async fn messages(
 
     let started = Instant::now();
 
-    let mut candidates: Vec<router_core::ModelCandidate> = std::iter::once(decision.winner.clone())
-        .chain(decision.alternatives.into_iter())
-        .take(FALLBACK_MAX_ATTEMPTS)
-        .collect();
-    let mut byte_stream: Option<ByteStream> = None;
-    let mut winner = decision.winner.clone();
-    let mut last_err: Option<ApiError> = None;
-    while !candidates.is_empty() {
-        let cand = candidates.remove(0);
-        let openai_body = norm_to_openai(&norm, &cand.id, true);
-        let attempt = match cand.backend {
-            Backend::OpenRouter => match state.registry.openrouter() {
-                Some(client) => client
-                    .chat_completion_stream(&cand.id, &profile, openai_body)
-                    .await
-                    .map_err(|e| ApiError::Upstream(e.to_string()))
-                    .map(|s| -> std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>> {
-                        Box::pin(s.map(|r| r.map_err(std::io::Error::other)))
-                    }),
-                None => Err(ApiError::Internal("OpenRouter backend not configured".into())),
-            },
-            Backend::OMlx => match state.registry.omlx() {
-                Some(client) => client
-                    .chat_completion_stream(&cand.id, openai_body)
-                    .await
-                    .map_err(|e| ApiError::Upstream(e.to_string()))
-                    .map(|s| -> std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>> {
-                        Box::pin(s.map(|r| r.map_err(std::io::Error::other)))
-                    }),
-                None => Err(ApiError::Internal("oMLX backend not configured".into())),
-            },
-        };
-        match attempt {
-            Ok(s) => {
-                winner = cand;
-                byte_stream = Some(s);
-                break;
-            }
-            Err(e) => {
-                let next = candidates
-                    .first()
-                    .map(|c| c.id.clone())
-                    .unwrap_or_else(|| "<none>".into());
-                announce_fallback("anthropic", &cand.id, &next, &e.to_string());
-                last_err = Some(e);
-            }
-        }
-    }
-    let byte_stream = byte_stream.ok_or_else(|| {
-        last_err.unwrap_or_else(|| ApiError::Internal("no candidates available".into()))
-    })?;
+    let (winner, byte_stream) = stream_with_fallback(
+        &state,
+        &profile,
+        decision,
+        "anthropic",
+        |cand| norm_to_openai(&norm, &cand.id, true),
+    )
+    .await?;
 
     // Non-Stream: Upstream-SSE absammeln und zu einem Anthropic-Messages-Body
     // aggregieren (Clients mit `stream: false` erwarten JSON, kein SSE).
@@ -106,13 +62,13 @@ pub async fn messages(
         let bytes = collect_stream(byte_stream).await?;
         let elapsed = started.elapsed();
         let acc = accumulate_completion(&bytes);
-        state.tracker.record(winner.backend, &winner.id, elapsed);
+        state.tracker.record(&winner.backend_id, &winner.id, elapsed);
         announce_completion("anthropic", &winner.id, elapsed, acc.cost);
         state.history.record(crate::history::Transaction {
             unix_ts: now_unix(),
             api: "anthropic".into(),
             profile: profile.name.clone(),
-            backend: format!("{:?}", winner.backend),
+            backend: winner.backend_id.clone(),
             model_id: winner.id.clone(),
             duration_ms: elapsed.as_millis() as u64,
             cost_usd: acc.cost,
@@ -127,23 +83,19 @@ pub async fn messages(
     let profile_name = profile.name.clone();
     let model_for_event = winner.id.clone();
     let model_for_log = winner.id.clone();
-    let backend = winner.backend;
+    let backend_id = winner.backend_id.clone();
     let event_stream = openai_sse_to_anthropic(byte_stream, model_for_event, move |elapsed, cost| {
-        tracker.record(backend, &winner.id, elapsed);
+        tracker.record(&backend_id, &winner.id, elapsed);
         announce_completion("anthropic", &model_for_log, elapsed, cost);
         history.record(crate::history::Transaction {
-            unix_ts: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0),
+            unix_ts: now_unix(),
             api: "anthropic".into(),
             profile: profile_name,
-            backend: format!("{backend:?}"),
+            backend: backend_id.clone(),
             model_id: model_for_log.clone(),
             duration_ms: elapsed.as_millis() as u64,
             cost_usd: cost,
         });
-        let _ = started; // nur für Klarheit
     });
 
     Ok(Sse::new(event_stream).keep_alive(KeepAlive::default()).into_response())
@@ -454,24 +406,6 @@ where
     futures::stream::once(started_event).chain(mid_stream).chain(closing)
 }
 
-fn find_event_boundary(buf: &[u8]) -> Option<usize> {
-    buf.windows(2).position(|w| w == b"\n\n").or_else(|| {
-        buf.windows(4).position(|w| w == b"\r\n\r\n")
-    })
-}
-
-fn parse_sse_data(bytes: &[u8]) -> Option<String> {
-    let text = std::str::from_utf8(bytes).ok()?;
-    let mut data = String::new();
-    for line in text.lines() {
-        if let Some(rest) = line.strip_prefix("data: ").or_else(|| line.strip_prefix("data:")) {
-            if !data.is_empty() { data.push('\n'); }
-            data.push_str(rest);
-        }
-    }
-    if data.is_empty() { None } else { Some(data) }
-}
-
 fn sse_event(name: &str, payload: Value) -> Event {
     Event::default().event(name).data(payload.to_string())
 }
@@ -542,13 +476,6 @@ fn anthropic_body_from(acc: &Accumulated, model_id: &str) -> Value {
             "output_tokens": acc.completion_tokens.unwrap_or(0),
         },
     })
-}
-
-fn now_unix() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
 }
 
 #[cfg(test)]

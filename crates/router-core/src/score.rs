@@ -109,12 +109,7 @@ pub fn rank(mut candidates: Vec<ScoredCandidate>) -> Vec<ScoredCandidate> {
         b.score
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| {
-                a.model
-                    .backend
-                    .tiebreak_priority()
-                    .cmp(&b.model.backend.tiebreak_priority())
-            })
+            .then_with(|| a.model.tiebreak_priority.cmp(&b.model.tiebreak_priority))
             .then_with(|| a.model.id.cmp(&b.model.id))
     });
     candidates
@@ -123,17 +118,19 @@ pub fn rank(mut candidates: Vec<ScoredCandidate>) -> Vec<ScoredCandidate> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry::{Backend, CapsSet, ModalitySet, PrivacyClass};
+    use crate::registry::{CapsSet, ModalitySet, PrivacyClass};
 
     fn cand(
-        backend: Backend,
+        backend_id: &str,
+        tiebreak_priority: u8,
         id: &str,
         ctx: u32,
         price_out: f64,
         p95: Option<u32>,
     ) -> ModelCandidate {
         ModelCandidate {
-            backend,
+            backend_id: backend_id.into(),
+            tiebreak_priority,
             id: id.into(),
             provider_slug: id.split('/').next().unwrap_or("local").into(),
             context_length: ctx,
@@ -182,8 +179,8 @@ mod tests {
     #[test]
     fn cheaper_wins_with_equal_latency() {
         let req = NormRequest { prompt_tokens_est: 1000, max_tokens: Some(500), ..Default::default() };
-        let a = cand(Backend::OpenRouter, "a/cheap", 200_000, 1.0, Some(1000));
-        let b = cand(Backend::OpenRouter, "b/expensive", 200_000, 20.0, Some(1000));
+        let a = cand("openrouter", 1, "a/cheap", 200_000, 1.0, Some(1000));
+        let b = cand("openrouter", 1, "b/expensive", 200_000, 20.0, Some(1000));
         let scored = vec![
             score_candidate(&req, &balanced_profile(), &a),
             score_candidate(&req, &balanced_profile(), &b),
@@ -196,8 +193,8 @@ mod tests {
     fn lexicographic_tiebreak_is_stable() {
         let req = NormRequest { prompt_tokens_est: 100, max_tokens: Some(100), ..Default::default() };
         // Gleicher Preis, gleiche Latenz -> Score identisch.
-        let a = cand(Backend::OpenRouter, "z/model", 200_000, 1.0, Some(1000));
-        let b = cand(Backend::OpenRouter, "a/model", 200_000, 1.0, Some(1000));
+        let a = cand("openrouter", 1, "z/model", 200_000, 1.0, Some(1000));
+        let b = cand("openrouter", 1, "a/model", 200_000, 1.0, Some(1000));
         let scored = vec![
             score_candidate(&req, &balanced_profile(), &a),
             score_candidate(&req, &balanced_profile(), &b),
@@ -209,13 +206,13 @@ mod tests {
     #[test]
     fn omlx_wins_tiebreak_vs_openrouter() {
         let req = NormRequest { prompt_tokens_est: 100, max_tokens: Some(100), ..Default::default() };
-        let a = cand(Backend::OpenRouter, "same/model", 200_000, 0.0, Some(1000));
-        let b = cand(Backend::OMlx, "same/model", 200_000, 0.0, Some(1000));
+        let a = cand("openrouter", 1, "same/model", 200_000, 0.0, Some(1000));
+        let b = cand("omlx", 0, "same/model", 200_000, 0.0, Some(1000));
         let scored = vec![
             score_candidate(&req, &balanced_profile(), &a),
             score_candidate(&req, &balanced_profile(), &b),
         ];
         let ranked = rank(scored);
-        assert_eq!(ranked[0].model.backend, Backend::OMlx);
+        assert_eq!(ranked[0].model.backend_id, "omlx");
     }
 }

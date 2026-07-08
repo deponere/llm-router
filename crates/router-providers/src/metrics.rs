@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
-use router_core::Backend;
 
 const RING_SIZE: usize = 128;
 
@@ -44,30 +43,30 @@ impl Ring {
 
 #[derive(Debug, Default, Clone)]
 pub struct LatencyTracker {
-    inner: Arc<Mutex<HashMap<(Backend, String), Ring>>>,
+    inner: Arc<Mutex<HashMap<(String, String), Ring>>>,
 }
 
 impl LatencyTracker {
     pub fn new() -> Self { Self::default() }
 
-    pub fn record(&self, backend: Backend, model_id: &str, elapsed: Duration) {
+    pub fn record(&self, backend_id: &str, model_id: &str, elapsed: Duration) {
         let ms = elapsed.as_millis().min(u32::MAX as u128) as u32;
         let mut map = self.inner.lock();
         let ring = map
-            .entry((backend, model_id.to_string()))
+            .entry((backend_id.to_string(), model_id.to_string()))
             .or_default();
         ring.push(LatencySample { ms, at: Instant::now() });
     }
 
-    pub fn p95_ms(&self, backend: Backend, model_id: &str) -> Option<u32> {
+    pub fn p95_ms(&self, backend_id: &str, model_id: &str) -> Option<u32> {
         let map = self.inner.lock();
-        map.get(&(backend, model_id.to_string()))
+        map.get(&(backend_id.to_string(), model_id.to_string()))
             .and_then(|r| r.percentile_ms(0.95))
     }
 
-    pub fn p50_ms(&self, backend: Backend, model_id: &str) -> Option<u32> {
+    pub fn p50_ms(&self, backend_id: &str, model_id: &str) -> Option<u32> {
         let map = self.inner.lock();
-        map.get(&(backend, model_id.to_string()))
+        map.get(&(backend_id.to_string(), model_id.to_string()))
             .and_then(|r| r.percentile_ms(0.5))
     }
 }
@@ -81,14 +80,10 @@ mod tests {
         let t = LatencyTracker::new();
         // Linear 100..=2000, p50 ~= 1000, p95 ~= 1900.
         for i in 1..=20u32 {
-            t.record(
-                Backend::OpenRouter,
-                "m",
-                Duration::from_millis((i * 100) as u64),
-            );
+            t.record("openrouter", "m", Duration::from_millis((i * 100) as u64));
         }
-        let p95 = t.p95_ms(Backend::OpenRouter, "m").unwrap();
-        let p50 = t.p50_ms(Backend::OpenRouter, "m").unwrap();
+        let p95 = t.p95_ms("openrouter", "m").unwrap();
+        let p50 = t.p50_ms("openrouter", "m").unwrap();
         assert!(p95 >= 1800, "p95 was {p95}");
         assert!((900..=1200).contains(&p50), "p50 was {p50}");
         assert!(p50 < p95);

@@ -33,36 +33,66 @@ pub struct ServerConfig {
     pub bind: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct BackendsConfig {
-    #[serde(default)]
-    pub openrouter: Option<OpenRouterBackendConfig>,
-    #[serde(default)]
-    pub omlx: Option<OMlxBackendConfig>,
-}
+/// Alle konfigurierten Backend-Instanzen, Key = Backend-ID (z. B. "openai",
+/// "groq", "anthropic", "omlx", "openrouter"). Der Key wird zum `backend_id`
+/// jedes Modells und dient als Dispatch- und Metrics-Schlüssel.
+pub type BackendsConfig = BTreeMap<String, BackendConfig>;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct OpenRouterBackendConfig {
+pub struct BackendConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
-    pub api_key_env: String,
+    /// Bestimmt Protokoll + Header-Schema (siehe [`BackendKind`]).
+    pub kind: BackendKind,
+    /// Voller URL-Prefix inkl. Versionssegment. Der Client hängt `/models`
+    /// bzw. `/chat/completions` an. Beispiele:
+    ///   - `https://api.openai.com/v1`
+    ///   - `https://openrouter.ai/api/v1`
+    ///   - `http://localhost:11434/v1` (Ollama)
+    ///   - `https://generativelanguage.googleapis.com/v1beta/openai` (Gemini)
     pub base_url: String,
+    #[serde(default)]
+    pub auth: AuthConfig,
+    /// Lokales Backend (Ollama/LM Studio/oMLX): gewinnt bei Score-Gleichstand
+    /// und bekommt standardmäßig die Privacy-Klasse `Local`.
+    #[serde(default)]
+    pub local: bool,
+    /// Nur `kind = "openrouter"`: optionale Attributions-Header.
     #[serde(default)]
     pub app_referer: Option<String>,
     #[serde(default)]
     pub app_title: Option<String>,
+    /// Nur `kind = "anthropic"`: `anthropic-version`-Header (Default 2023-06-01).
+    #[serde(default)]
+    pub anthropic_version: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct OMlxBackendConfig {
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    #[serde(default)]
-    pub base_url_env: Option<String>,
-    pub base_url_default: String,
-    /// Optionaler API-Key, falls oMLX hinter einem Reverse-Proxy mit Auth läuft.
-    #[serde(default)]
-    pub api_key_env: Option<String>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BackendKind {
+    /// Generischer OpenAI-kompatibler Server (OpenAI, Groq, DeepSeek, xAI,
+    /// Mistral, Gemini-OpenAI-Endpoint, Ollama, LM Studio, oMLX …).
+    OpenaiCompat,
+    /// OpenRouter-Aggregator: reiches `/models`-Schema + `provider`-Block.
+    Openrouter,
+    /// Anthropic nativ (`/v1/messages`): Egress-Client übersetzt in beide
+    /// Richtungen OpenAI ↔ Anthropic.
+    Anthropic,
+}
+
+/// Auth-Verfahren pro Backend. OAuth ist bewusst noch nicht enthalten —
+/// die Enum ist über `#[serde(tag = "type")]` trivial um eine `oauth`-Variante
+/// mit Token-Refresh erweiterbar, sobald ein konkreter Provider sie braucht.
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AuthConfig {
+    /// Keine Auth (lokale Server ohne Key).
+    #[default]
+    None,
+    /// Secret aus einer Umgebungsvariable. Header-Schema bestimmt der
+    /// `BackendKind` (Bearer bei OpenAI-compat/OpenRouter, `x-api-key` bei
+    /// Anthropic).
+    ApiKey { env: String },
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -253,11 +283,14 @@ mod tests {
             bind = "127.0.0.1:4000"
 
             [backends.openrouter]
-            api_key_env = "OPENROUTER_API_KEY"
+            kind = "openrouter"
             base_url = "https://openrouter.ai/api/v1"
+            auth = { type = "api_key", env = "OPENROUTER_API_KEY" }
 
             [backends.omlx]
-            base_url_default = "http://127.0.0.1:8000"
+            kind = "openai_compat"
+            base_url = "http://127.0.0.1:8000/v1"
+            local = true
 
             [profiles.default]
             weights = { cost = 0.5, latency = 0.25, context = 0.1, preference = 0.15 }
@@ -265,7 +298,9 @@ mod tests {
         )
         .unwrap();
         assert_eq!(cfg.server.bind, "127.0.0.1:4000");
-        assert!(cfg.backends.openrouter.is_some());
+        assert!(cfg.backends.contains_key("openrouter"));
+        assert_eq!(cfg.backends["openrouter"].kind, BackendKind::Openrouter);
+        assert!(cfg.backends["omlx"].local);
         assert!(cfg.default_profile().weights.sum() > 0.9);
     }
 

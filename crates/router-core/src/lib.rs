@@ -15,4 +15,4 @@ pub use norm::{
     RequiredCaps, ResponseFormat, ToolDef,
 };
 pub use profile::ResolvedProfile;
-pub use registry::{Backend, CapsSet, ModalitySet, ModelCandidate, PrivacyClass, Registry};
+pub use registry::{CapsSet, ModalitySet, ModelCandidate, PrivacyClass, Registry};

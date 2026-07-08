@@ -4,6 +4,7 @@ pub mod state;
 pub mod routes;
 pub mod openai;
 pub mod anthropic;
+pub mod sse;
 pub mod debug;
 pub mod history;
 pub mod error;

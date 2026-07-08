@@ -1,55 +1,48 @@
-//! OpenRouter-Client: Modell-Katalog und Chat-Completions.
+//! OpenRouter-Client: Modell-Katalog und Chat-Completions. Sonderfall unter
+//! den Backends: reiches `/models`-Schema (Pricing/Modalitäten/Caps) +
+//! `provider`-Block aus dem Profil + Privacy-Overlay über die Sub-Provider.
 
 use std::time::Duration;
 
-use bytes::Bytes;
-use futures::Stream;
+use async_trait::async_trait;
+use futures::StreamExt;
 use reqwest::Client;
-use router_config::OpenRouterBackendConfig;
+use router_config::{AuthConfig, BackendConfig, RegistryConfig};
 use router_core::profile::ResolvedProfile;
-use router_core::registry::{Backend, CapsSet, ModalitySet, ModelCandidate, PrivacyClass};
+use router_core::registry::{CapsSet, ModalitySet, ModelCandidate, PrivacyClass};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, thiserror::Error)]
-pub enum OpenRouterError {
-    #[error("http error: {0}")]
-    Http(#[from] reqwest::Error),
-    #[error("missing api key env var {0}")]
-    MissingApiKey(String),
-    #[error("upstream returned {status}: {body}")]
-    Upstream { status: u16, body: String },
-}
+use crate::provider::{resolve_secret, ByteStream, Provider, ProviderError};
 
 #[derive(Debug, Clone)]
 pub struct OpenRouterClient {
+    id: String,
     http: Client,
     base_url: String,
-    api_key: Option<String>,
+    auth: AuthConfig,
     app_referer: Option<String>,
     app_title: Option<String>,
 }
 
 impl OpenRouterClient {
-    pub fn new(cfg: &OpenRouterBackendConfig) -> Self {
-        let api_key = std::env::var(&cfg.api_key_env).ok();
+    pub fn new(id: &str, cfg: &BackendConfig) -> Self {
         let http = Client::builder()
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(300))
             .build()
             .expect("reqwest client");
         Self {
+            id: id.to_string(),
             http,
             base_url: cfg.base_url.trim_end_matches('/').to_string(),
-            api_key,
+            auth: cfg.auth.clone(),
             app_referer: cfg.app_referer.clone(),
             app_title: cfg.app_title.clone(),
         }
     }
 
-    pub fn has_api_key(&self) -> bool { self.api_key.is_some() }
-
-    fn apply_headers(&self, mut req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        if let Some(k) = &self.api_key {
+    fn apply_headers(&self, mut req: reqwest::RequestBuilder) -> Result<reqwest::RequestBuilder, ProviderError> {
+        if let Some(k) = resolve_secret(&self.auth)? {
             req = req.bearer_auth(k);
         }
         if let Some(r) = &self.app_referer {
@@ -58,36 +51,33 @@ impl OpenRouterClient {
         if let Some(t) = &self.app_title {
             req = req.header("X-Title", t);
         }
-        req
+        Ok(req)
     }
+}
 
-    /// Holt die vollständige Modell-Liste.
-    pub async fn list_models(&self) -> Result<Vec<ModelCandidate>, OpenRouterError> {
+#[async_trait]
+impl Provider for OpenRouterClient {
+    fn id(&self) -> &str { &self.id }
+    fn is_local(&self) -> bool { false }
+
+    async fn list_models(&self, cfg: &RegistryConfig) -> Result<Vec<ModelCandidate>, ProviderError> {
         let url = format!("{}/models", self.base_url);
-        let req = self.apply_headers(self.http.get(url));
-        let resp = req.send().await?;
+        let resp = self.apply_headers(self.http.get(url))?.send().await?;
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
             let body = resp.text().await.unwrap_or_default();
-            return Err(OpenRouterError::Upstream { status, body });
+            return Err(ProviderError::Upstream { status, body });
         }
         let parsed: ModelsResponse = resp.json().await?;
-        Ok(parsed.data.into_iter().map(from_api_model).collect())
+        Ok(parsed.data.into_iter().map(|m| self.to_candidate(m, cfg)).collect())
     }
 
-    /// Baut den Body für `/chat/completions` inklusive `provider`-Block aus dem
-    /// aufgelösten Profil und liefert den Response-Stream (SSE) zurück.
-    pub async fn chat_completion_stream(
+    async fn chat_completion_stream(
         &self,
         model_id: &str,
         profile: &ResolvedProfile,
         request: serde_json::Value,
-    ) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, OpenRouterError> {
-        let Some(_) = &self.api_key else {
-            return Err(OpenRouterError::MissingApiKey(
-                "OPENROUTER_API_KEY".into(),
-            ));
-        };
+    ) -> Result<ByteStream, ProviderError> {
         let url = format!("{}/chat/completions", self.base_url);
         let mut body = request;
         if let serde_json::Value::Object(map) = &mut body {
@@ -95,10 +85,7 @@ impl OpenRouterClient {
             map.insert("stream".into(), serde_json::Value::Bool(true));
             // Kosten auch im Stream mitliefern lassen — OpenRouter haengt ein
             // zusaetzliches usage-Event mit `cost` an, sobald das hier true ist.
-            map.insert(
-                "usage".into(),
-                serde_json::json!({ "include": true }),
-            );
+            map.insert("usage".into(), serde_json::json!({ "include": true }));
             if let Some(provider) = build_provider_block(profile) {
                 map.insert("provider".into(), provider);
             }
@@ -111,7 +98,7 @@ impl OpenRouterClient {
             "→ openrouter POST /chat/completions"
         );
         let req = self
-            .apply_headers(self.http.post(url).json(&body))
+            .apply_headers(self.http.post(url).json(&body))?
             .header("Accept", "text/event-stream");
         let resp = req.send().await?;
         if !resp.status().is_success() {
@@ -124,9 +111,10 @@ impl OpenRouterClient {
                 sent_body = %serde_json::to_string(&body).unwrap_or_default(),
                 "openrouter rejected request"
             );
-            return Err(OpenRouterError::Upstream { status, body: body_txt });
+            return Err(ProviderError::Upstream { status, body: body_txt });
         }
-        Ok(resp.bytes_stream())
+        let stream = resp.bytes_stream().map(|r| r.map_err(std::io::Error::other));
+        Ok(Box::pin(stream) as ByteStream)
     }
 }
 
@@ -273,37 +261,44 @@ fn provider_slug(id: &str) -> String {
     id.split('/').next().unwrap_or(id).to_string()
 }
 
-fn from_api_model(m: ApiModel) -> ModelCandidate {
-    let arch = m.architecture.unwrap_or_default();
-    let pricing = m.pricing.unwrap_or_default();
-    let top = m.top_provider.unwrap_or_default();
-    let ctx_len = m
-        .context_length
-        .or(top.context_length)
-        .unwrap_or(0);
-    let input_modalities = if arch.input_modalities.is_empty() {
-        ModalitySet::text_only()
-    } else {
-        ModalitySet::from_strings(&arch.input_modalities)
-    };
-    let supports = CapsSet::from_supported_parameters(&m.supported_parameters);
-    let slug = provider_slug(&m.id);
-    ModelCandidate {
-        backend: Backend::OpenRouter,
-        provider_slug: slug,
-        price_in_per_mtok: pricing_to_per_mtok(&pricing.prompt),
-        price_out_per_mtok: pricing_to_per_mtok(&pricing.completion),
-        context_length: ctx_len,
-        max_completion_tokens: top.max_completion_tokens,
-        input_modalities,
-        supports,
-        is_moderated: top.is_moderated.unwrap_or(false),
-        // Privacy-Klasse setzt die Registry, nicht der Client (dafür braucht's
-        // den Privacy-Overlay aus der Config).
-        privacy_class: PrivacyClass::Standard,
-        measured_p95_ms: None,
-        intelligence_index: None,
-        id: m.id,
+impl OpenRouterClient {
+    fn to_candidate(&self, m: ApiModel, cfg: &RegistryConfig) -> ModelCandidate {
+        let arch = m.architecture.unwrap_or_default();
+        let pricing = m.pricing.unwrap_or_default();
+        let top = m.top_provider.unwrap_or_default();
+        let ctx_len = m.context_length.or(top.context_length).unwrap_or(0);
+        let input_modalities = if arch.input_modalities.is_empty() {
+            ModalitySet::text_only()
+        } else {
+            ModalitySet::from_strings(&arch.input_modalities)
+        };
+        let supports = CapsSet::from_supported_parameters(&m.supported_parameters);
+        let slug = provider_slug(&m.id);
+        // Privacy-Overlay: OpenRouter bündelt viele Sub-Provider, deren
+        // Datenschutz-Klasse aus den Config-Listen kommt (Slug vor dem `/`).
+        let privacy_class = if cfg.privacy.local.iter().any(|s| s == &slug) {
+            PrivacyClass::Local
+        } else if cfg.privacy.zdr.iter().any(|s| s == &slug) {
+            PrivacyClass::Zdr
+        } else {
+            PrivacyClass::Standard
+        };
+        ModelCandidate {
+            backend_id: self.id.clone(),
+            tiebreak_priority: 1,
+            provider_slug: slug,
+            price_in_per_mtok: pricing_to_per_mtok(&pricing.prompt),
+            price_out_per_mtok: pricing_to_per_mtok(&pricing.completion),
+            context_length: ctx_len,
+            max_completion_tokens: top.max_completion_tokens,
+            input_modalities,
+            supports,
+            is_moderated: top.is_moderated.unwrap_or(false),
+            privacy_class,
+            measured_p95_ms: None,
+            intelligence_index: None,
+            id: m.id,
+        }
     }
 }
 

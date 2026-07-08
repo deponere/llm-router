@@ -69,7 +69,7 @@ pub fn decide(
             }
             Err(reason) => {
                 rejected.push(RejectedEntry {
-                    backend: format!("{:?}", cand.backend),
+                    backend: cand.backend_id.clone(),
                     model_id: cand.id.clone(),
                     reason: format_reason(&reason),
                 });
@@ -118,7 +118,7 @@ fn to_accepted(s: &ScoredCandidate) -> AcceptedEntry {
         used_p95_ms,
     } = s.breakdown;
     AcceptedEntry {
-        backend: format!("{:?}", s.model.backend),
+        backend: s.model.backend_id.clone(),
         model_id: s.model.id.clone(),
         score: s.score,
         cost_score: cost,
@@ -166,12 +166,14 @@ fn format_reason(r: &FilterReason) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry::{Backend, CapsSet, ModalitySet, PrivacyClass};
+    use crate::registry::{CapsSet, ModalitySet, PrivacyClass};
     use router_config::Weights;
 
-    fn cand(backend: Backend, id: &str, ctx: u32, price_out: f64) -> ModelCandidate {
+    fn cand(backend_id: &str, id: &str, ctx: u32, price_out: f64) -> ModelCandidate {
+        let local = backend_id == "omlx";
         ModelCandidate {
-            backend,
+            backend_id: backend_id.into(),
+            tiebreak_priority: if local { 0 } else { 1 },
             id: id.into(),
             provider_slug: id.split('/').next().unwrap_or("local").into(),
             context_length: ctx,
@@ -181,7 +183,7 @@ mod tests {
             input_modalities: ModalitySet::text_only(),
             supports: CapsSet::default(),
             is_moderated: false,
-            privacy_class: if backend == Backend::OMlx {
+            privacy_class: if local {
                 PrivacyClass::Local
             } else {
                 PrivacyClass::Zdr
@@ -220,9 +222,9 @@ mod tests {
         let req = NormRequest { prompt_tokens_est: 500, max_tokens: Some(200), ..Default::default() };
         let registry = Registry {
             models: vec![
-                cand(Backend::OpenRouter, "a/cheap", 200_000, 1.0),
-                cand(Backend::OpenRouter, "b/midrange", 200_000, 3.0),
-                cand(Backend::OpenRouter, "c/expensive", 200_000, 20.0),
+                cand("openrouter", "a/cheap", 200_000, 1.0),
+                cand("openrouter", "b/midrange", 200_000, 3.0),
+                cand("openrouter", "c/expensive", 200_000, 20.0),
             ],
         };
         let d = decide(&req, &cheap_profile(), &registry).unwrap();
@@ -239,7 +241,7 @@ mod tests {
     fn error_when_no_candidate_survives() {
         let req = NormRequest { prompt_tokens_est: 1_000_000, max_tokens: Some(200), ..Default::default() };
         let registry = Registry {
-            models: vec![cand(Backend::OpenRouter, "a/cheap", 8_000, 1.0)],
+            models: vec![cand("openrouter", "a/cheap", 8_000, 1.0)],
         };
         let res = decide(&req, &cheap_profile(), &registry);
         assert!(matches!(res, Err(DecisionError::NoCandidate { .. })));

@@ -60,7 +60,7 @@ pub fn passes_all(
 
     // 3. Backend-Allowlist des Profils.
     if !profile.backend_allowlist.is_empty()
-        && !profile.backend_allowlist.contains(&cand.backend)
+        && !profile.backend_allowlist.contains(&cand.backend_id)
     {
         return Err(FilterReason::BackendNotAllowed);
     }
@@ -168,11 +168,12 @@ fn glob_bytes(pat: &[u8], txt: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry::{Backend, CapsSet, ModalitySet};
+    use crate::registry::{CapsSet, ModalitySet};
 
     fn candidate(id: &str, ctx: u32, price_out: f64) -> ModelCandidate {
         ModelCandidate {
-            backend: Backend::OpenRouter,
+            backend_id: "openrouter".into(),
+            tiebreak_priority: 1,
             id: id.into(),
             provider_slug: "anthropic".into(),
             context_length: ctx,

@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use router_config::{Config, Profile, Weights};
 
-use crate::registry::{Backend, PrivacyClass};
+use crate::registry::PrivacyClass;
 
 #[derive(Debug, Clone)]
 pub struct ResolvedProfile {
@@ -18,7 +18,8 @@ pub struct ResolvedProfile {
     pub max_latency_p95_ms: Option<u32>,
 
     pub require_privacy_class: HashSet<PrivacyClass>,
-    pub backend_allowlist: HashSet<Backend>,
+    /// Erlaubte Backend-IDs (Config-Namen). Leer = keine Einschränkung.
+    pub backend_allowlist: HashSet<String>,
     pub preferences: Vec<String>,
 
     pub model_allowlist: Vec<String>,
@@ -43,10 +44,12 @@ impl ResolvedProfile {
             .iter()
             .filter_map(|s| PrivacyClass::from_str(s).ok())
             .collect();
-        let backend_allowlist: HashSet<Backend> = p
+        // Backend-IDs case-insensitiv normalisieren, damit das Profil sowohl
+        // "OpenRouter" als auch "openrouter" akzeptiert.
+        let backend_allowlist: HashSet<String> = p
             .backend_allowlist
             .iter()
-            .filter_map(|s| Backend::from_str(s).ok())
+            .map(|s| s.to_ascii_lowercase())
             .collect();
 
         Self {
@@ -95,10 +98,9 @@ mod tests {
             [server]
             bind = "127.0.0.1:4000"
             [backends.openrouter]
-            api_key_env = "X"
+            kind = "openrouter"
             base_url = "https://x"
-            [backends.omlx]
-            base_url_default = "http://x"
+            auth = { type = "api_key", env = "X" }
             [profiles.default]
             weights = { cost = 1.0, latency = 0.0, context = 0.0, preference = 0.0 }
             "#,
