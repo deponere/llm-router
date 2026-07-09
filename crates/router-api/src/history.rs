@@ -1,5 +1,5 @@
-//! In-Memory-Ring-Buffer aller abgeschlossenen Requests. Dient dem
-//! xbar-/Dashboard-Widget zur Kostenverfolgung.
+//! In-Memory-Ring-Buffer aller abgeschlossenen Requests, exponiert für die
+//! Kostenverfolgung im Dashboard.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
