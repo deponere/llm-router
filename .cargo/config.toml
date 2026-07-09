@@ -1,0 +1,9 @@
+# /opt/homebrew/bin/cc is a Node shim that shadows Apple's real /usr/bin/cc.
+# Point both the C compiler (cc-rs / ring build scripts) and the linker at the
+# real toolchain so `cargo build`/`run` work without an env prefix.
+[env]
+CC = "/usr/bin/cc"
+HOST_CC = "/usr/bin/cc"
+
+[target.aarch64-apple-darwin]
+linker = "/usr/bin/cc"
