@@ -24,14 +24,13 @@ bind = "127.0.0.1:4000"
 # Pricing-Metadaten mitliefert.
 
 [backends.openrouter]
-enabled = false
+enabled = true
 kind = "openrouter"
 base_url = "https://openrouter.ai/api/v1"
 auth = { type = "api_key", env = "OPENROUTER_API_KEY" }
 # HTTP-Referer und X-Title sind optional, erscheinen in OpenRouter-Stats.
 app_referer = "https://localhost/router"
 app_title = "deponere_router"
-local = false
 
 # --- Lokale Backends (alle OpenAI-kompatibel) — nach Bedarf aktivieren ---
 
@@ -64,14 +63,12 @@ enabled = false
 kind = "openai_compat"
 base_url = "https://api.openai.com/v1"
 auth = { type = "api_key", env = "OPENAI_API_KEY" }
-local = false
 
 [backends.anthropic]
 enabled = false
 kind = "anthropic"
 base_url = "https://api.anthropic.com/v1"
 auth = { type = "api_key", env = "ANTHROPIC_API_KEY" }
-local = false
 # anthropic_version = "2023-06-01"  # optional override
 
 [backends.gemini]
@@ -79,35 +76,30 @@ enabled = false
 kind = "openai_compat"
 base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
 auth = { type = "api_key", env = "GEMINI_API_KEY" }
-local = false
 
 [backends.groq]
 enabled = false
 kind = "openai_compat"
 base_url = "https://api.groq.com/openai/v1"
 auth = { type = "api_key", env = "GROQ_API_KEY" }
-local = false
 
 [backends.deepseek]
 enabled = false
 kind = "openai_compat"
 base_url = "https://api.deepseek.com/v1"
 auth = { type = "api_key", env = "DEEPSEEK_API_KEY" }
-local = false
 
 [backends.xai]
 enabled = false
 kind = "openai_compat"
 base_url = "https://api.x.ai/v1"
 auth = { type = "api_key", env = "XAI_API_KEY" }
-local = false
 
 [backends.mistral]
 enabled = false
 kind = "openai_compat"
 base_url = "https://api.mistral.ai/v1"
 auth = { type = "api_key", env = "MISTRAL_API_KEY" }
-local = false
 
 # OAuth ist noch nicht implementiert (Phase 6). Wenn ein Provider es braucht,
 # wird AuthConfig um eine `oauth`-Variante mit Token-Refresh erweitert.
@@ -137,10 +129,12 @@ caps = ["tools"]
 backend = "omlx"
 id_prefix = "qwen2.5-vl"
 input_modalities = ["text", "image"]
+caps = []
 
 # Privacy-Klassifizierung pro OpenRouter-Provider-Slug (top-level Slug in model.id).
 # Provider, die hier nicht auftauchen, gelten als "Standard".
 [registry.privacy]
+local = []
 zdr = ["anthropic", "openai", "google"]
 
 # Artificial-Analysis-Anbindung. Wenn enabled = true und AA_API_KEY gesetzt,
@@ -179,8 +173,13 @@ ttl_seconds = 86400
 # Wildcards: * = beliebige Zeichenfolge, Muster gegen die volle model.id
 
 [profiles.default]
-weights = { cost = 0.3, latency = 0.2, context = 0.15, preference = 0.2, quality = 0.15 }
-preferences = ["Qwen3.6-35B-A3B-bf16", "gpt-oss-20b-MXFP4-Q8", "gemma-4-26B-A4B-it-MLX-8bit", "gemma-4-e2b-it-4bit"]
+weights = { cost = 0.30, latency = 0.20, context = 0.15, preference = 0.20, quality = 0.15 }
+preferences = [
+    "Qwen3.6-35B-A3B-bf16",
+    "gpt-oss-20b-MXFP4-Q8",
+    "gemma-4-26B-A4B-it-MLX-8bit",
+    "gemma-4-e2b-it-4bit",
+]
 # :free-Varianten haben enge Provider-Constraints und scheitern oft an
 # Tool-Parametern. Wenn der Caller `:free` will, ueber `cheap` oder explizit pinnen.
 model_denylist = ["*:free"]
@@ -189,19 +188,19 @@ model_denylist = ["*:free"]
 provider_require_parameters = false
 
 [profiles.cheap]
-weights = { cost = 0.9, latency = 0.05, context = 0.05, preference = 0, quality = 0 }
+weights = { cost = 0.9, latency = 0.05, context = 0.05, preference = 0.0 }
 max_price_out_per_mtok = 2.0
 provider_sort = "price"
 provider_require_parameters = true
 
 [profiles.fast]
-weights = { cost = 0.1, latency = 0.7, context = 0.1, preference = 0.1, quality = 0 }
+weights = { cost = 0.1, latency = 0.7, context = 0.1, preference = 0.1 }
 max_latency_p95_ms = 1500
 provider_sort = "latency"
 provider_require_parameters = true
 
 [profiles.private]
-weights = { cost = 0.2, latency = 0.2, context = 0.2, preference = 0.4, quality = 0 }
+weights = { cost = 0.2, latency = 0.2, context = 0.2, preference = 0.4 }
 require_privacy_class = ["Local", "Zdr"]
 provider_zdr = true
 provider_allow_fallbacks = false
@@ -209,8 +208,13 @@ provider_data_collection = "deny"
 provider_require_parameters = true
 
 [profiles.smart]
-weights = { cost = 0, latency = 0.1, context = 0.2, preference = 0.2, quality = 0.5 }
-preferences = ["anthropic/claude-opus-4-7", "anthropic/claude-opus-4-6", "openai/gpt-5", "google/gemini-2.5-pro"]
+weights = { cost = 0.0, latency = 0.10, context = 0.20, preference = 0.20, quality = 0.50 }
+preferences = [
+    "anthropic/claude-opus-4-7",
+    "anthropic/claude-opus-4-6",
+    "openai/gpt-5",
+    "google/gemini-2.5-pro",
+]
 # Hard-Filter: nur Modelle mit AA-Intelligence-Index >= diesem Wert.
 # Greift nur, wenn registry.intelligence.enabled = true und AA-Daten verfügbar sind.
 # min_intelligence_index = 50.0
@@ -222,6 +226,10 @@ provider_require_parameters = true
 # provider_quantizations = ["fp16", "bf16", "fp8"]
 
 [profiles.local]
-weights = { cost = 0, latency = 0.5, context = 0.2, preference = 0.3, quality = 0 }
+weights = { cost = 0.0, latency = 0.5, context = 0.2, preference = 0.3 }
 backend_allowlist = ["omlx"]
-preferences = ["qwen3-32b", "llama-3.3-70b", "qwen2.5-coder-32b"]
+preferences = [
+    "qwen3-32b",
+    "llama-3.3-70b",
+    "qwen2.5-coder-32b",
+]
