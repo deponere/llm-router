@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `Provider` trait — arbitrary backends beyond OpenRouter/oMLX: generic `openai_compat` (Ollama, LM Studio, OpenAI, Groq, DeepSeek, xAI, Mistral, Gemini) and native `anthropic` upstreams
+- Quality scoring via the Artificial Analysis Intelligence Index: fifth score term (`weights.quality`), `[registry.intelligence]` config with 24 h cache and id→slug aliases, and a `min_intelligence_index` hard filter
+- Fallback cascade — on an upstream 4xx/5xx the router streams from the next-best ranked candidate instead of returning the error
+- macOS SwiftUI menu-bar admin app (`macos-admin/`) plus `router-admin` — a `dump`/`apply` JSON bridge that rewrites `router.toml` via `toml_edit`, preserving comments and key order
+
+### Changed
+- `default` profile prefers oMLX models and denies `:free` variants; unsupported params dropped silently for robustness
+- `.cargo/config.toml` pins the real `cc` as compiler/linker (works around a Homebrew node `cc` shim on macOS)
+- Dependency + lint cleanup: dropped `tiktoken-rs`, `async-trait` (where unused), `eventsource-stream`, `pin-project-lite`, `tower`, `tokio-stream`; removed the xbar widget (replaced by the admin app)
+
+### Fixed
+- Spec-compliant Anthropic stream closing sequence
+- Honour `stream: false` on both APIs; aggregate `tool_calls` and usage for non-stream responses
+- Case-insensitive oMLX registry-override matching; AA client uses the `slug` field and strips `:free`
+
 ## 0.1.0
 
 - Initial public release

@@ -2,7 +2,21 @@
 
 A local proxy that speaks the OpenAI and Anthropic APIs and routes every request to the best available model via a deterministic expert system — no random sampling, no LLM-in-the-loop, no surprises.
 
-**Backends**: [OpenRouter](https://openrouter.ai/) (cloud, ~300 models) and [oMLX](https://omlx.ai/) (local Apple Silicon inference).
+**What it does**
+
+- One endpoint for every model: point any OpenAI **or** Anthropic client at `http://127.0.0.1:4000` and send `"model": "auto"`.
+- Picks the model per request from a weighted score over **cost, latency, context headroom, preference, and quality** — deterministic, same input → same choice.
+- Per-request steering via a `x-route-profile` header (six built-in profiles) or a `privacy_tag` for "keep this local / ZDR-only".
+- Falls back down the ranked list on upstream errors, streams SSE straight back to the caller.
+- A native **[macOS menu-bar admin app](#admin-app-macos)** to edit the whole config and start/stop the router.
+
+**Backends**: pluggable via the `Provider` trait. Built in:
+
+- `openrouter` — cloud meta-provider, ~300 models with full pricing + provider routing
+- `openai_compat` — any OpenAI-compatible server: [oMLX](https://omlx.ai/) / Ollama / LM Studio (local Apple Silicon), or OpenAI · Groq · DeepSeek · xAI · Mistral · Gemini (cloud)
+- `anthropic` — native `/v1/messages` upstream (translated to/from OpenAI internally)
+
+Any number of named backend instances can run at once; see [Configuration](#configuration).
 
 ## Get started
 
@@ -20,6 +34,8 @@ Then point any OpenAI or Anthropic client at `http://127.0.0.1:4000`. See [Quick
 - [How it works](#how-it-works) — the expert-system pipeline in four phases
 - [Profiles](#profiles) — the six built-in routing profiles and their weights
 - [Configuration](#configuration) — `config/router.toml` reference
+- [Admin app (macOS)](#admin-app-macos) — edit config + control the router from the menu bar
+- [Contributing](#contributing) — workspace layout, tests, and what has changed
 - [CHANGELOG](./CHANGELOG.md) — release notes
 
 ## Reporting bugs
@@ -44,13 +60,14 @@ Request Normalizer          unifies both API formats into NormRequest
 Expert System               purely deterministic — fixed rule order
   Phase 1  profile resolve  x-route-profile header or route_profile body field
   Phase 2  hard filter      context window · modalities · caps · privacy · price · backend
-  Phase 3  scoring          cost + latency + context headroom + preference (configurable weights)
+  Phase 3  scoring          cost + latency + context headroom + preference + quality (configurable weights)
   Phase 4  provider flags   injects provider.* block for OpenRouter requests
   │
   ▼
-Egress client               streams SSE directly back to the caller
-  ├── OpenRouter             cloud meta-provider with full provider routing control
-  └── oMLX                  local MLX server on Apple Silicon (OpenAI-native SSE)
+Egress client (Provider)    streams SSE back; falls back down the ranked list on upstream errors
+  ├── openrouter             cloud meta-provider with full provider routing control
+  ├── openai_compat          any OpenAI-compatible server (oMLX / Ollama / OpenAI / Groq / …)
+  └── anthropic              native /v1/messages, translated to/from OpenAI
 ```
 
 The expert system never makes an LLM call to decide routing. Given an identical request and an identical model registry snapshot, it always picks the same model.
@@ -87,7 +104,7 @@ Select a profile via the `x-route-profile` header or the `route_profile` body fi
 | `fast` | minimize latency | max 1 500 ms p95 · sort by latency |
 | `private` | no data leaving controlled providers | ZDR or local only · `allow_fallbacks=false` |
 | `smart` | best quality | Claude Opus / GPT-5 / Gemini 2.5 Pro · fp16/bf16/fp8 only |
-| `local` | oMLX only | `backend_allowlist=["OMlx"]` · zero cloud egress |
+| `local` | oMLX only | `backend_allowlist=["omlx"]` · zero cloud egress |
 
 Weights, caps, and hard limits for each profile live in `config/router.toml`.
 
@@ -106,18 +123,27 @@ Weights, caps, and hard limits for each profile live in `config/router.toml`.
 3. **Capabilities** — tools / structured_outputs / reasoning must be in `model.supported_parameters`
 4. **Privacy class** — profile may require `Local` or `Zdr`; `Standard` models are excluded
 5. **Output price cap** — `profile.max_price_out_per_mtok` hard ceiling
-6. **Backend allowlist** — profile may restrict to `OpenRouter` or `OMlx`
+6. **Backend allowlist** — profile may restrict to specific backend ids (e.g. `openrouter`, `omlx`)
 
 ### Phase 3 — scoring
 
 ```
-score = w_cost    · cost_score(model, profile)
-      + w_latency · latency_score(model.p95_ms)
-      + w_context · context_headroom_score(model, prompt_tokens)
-      + w_pref    · preference_score(model, profile.preferences)
+score = w_cost    · cost_score      + w_latency · latency_score
+      + w_context · context_score   + w_pref    · preference_score
+      + w_quality · quality_score
 ```
 
-All sub-scores normalised to [0, 1]. Weights sum to 1 and come from the active profile. Tiebreak: `(backend_priority, model_id)` lexicographically — documented in `router-core/src/score.rs` and fixed by a unit test.
+Each sub-score is normalised to `[0, 1]` (`router-core/src/score.rs`):
+
+| Sub-score | Formula | Horizon |
+|-----------|---------|---------|
+| `cost` | `1 − expected_cost_usd / 0.50` | > $0.50/request → 0 |
+| `latency` | `1 − p95_ms / 5000` | > 5 s p95 → 0; unmeasured → 2500 ms (neutral) |
+| `context` | `(context_length − prompt) / prompt` | more headroom → higher |
+| `preference` | `1 − index/len` by position in `profile.preferences` | unlisted → 0 |
+| `quality` | `intelligence_index / 100` (Artificial Analysis) | unrated → 0 (not a filter — see `min_intelligence_index`) |
+
+Weights come from the active profile and are normalised to sum to 1. Tiebreak is fully deterministic: `(score desc, backend_priority asc, model_id asc)` — a local backend wins an exact tie, fixed by a unit test.
 
 ### Phase 4 — OpenRouter provider flags
 
@@ -164,29 +190,36 @@ Accepts the full Anthropic request format including `thinking`, tool use blocks,
 
 ## Configuration
 
-`config/router.toml` is the single source of truth. Set `ROUTER_CONFIG` env var to override the path.
+`config/router.toml` is the single source of truth. Set `ROUTER_CONFIG` env var to override the path. It ships fully commented; the [admin app](#admin-app-macos) edits it without clobbering those comments. No hot-reload — a restart re-reads it.
 
 ### Backends
 
+Any number of named instances. The table key (e.g. `omlx`) is the backend id and appears in `backend_allowlist`, routing traces, and metrics. `kind` picks the protocol: `openai_compat` · `openrouter` · `anthropic`. `local = true` marks a backend as privacy-class `Local` and wins score ties.
+
 ```toml
 [backends.openrouter]
-enabled = true
-api_key_env = "OPENROUTER_API_KEY"
+enabled  = true
+kind     = "openrouter"
 base_url = "https://openrouter.ai/api/v1"
+auth     = { type = "api_key", env = "OPENROUTER_API_KEY" }
 
-[backends.omlx]
-enabled = true
-base_url_env = "OMLX_HOST"
-base_url_default = "http://127.0.0.1:8000"
+[backends.omlx]              # local Apple Silicon MLX server
+enabled  = true
+kind     = "openai_compat"
+base_url = "http://127.0.0.1:8000/v1"
+auth     = { type = "none" }
+local    = true
 ```
+
+`auth` is `{ type = "none" }` or `{ type = "api_key", env = "ENV_NAME" }`. Generic `openai_compat`/`anthropic` backends don't report prices (cost term = free); use `openrouter` for price-aware routing. Direct cloud providers (OpenAI, Anthropic, Gemini, Groq, DeepSeek, xAI, Mistral) ship pre-defined but disabled — flip `enabled` and export the key.
 
 ### Registry overrides
 
-Used to patch modalities or capabilities that the backend's `/models` endpoint doesn't report:
+Patch modalities or capabilities that a backend's `/models` endpoint doesn't report:
 
 ```toml
 [[registry.overrides]]
-backend = "OMlx"
+backend = "omlx"
 id_prefix = "qwen3"
 input_modalities = ["text"]
 caps = ["tools"]
@@ -194,15 +227,27 @@ caps = ["tools"]
 
 ### Privacy classification
 
-Maps OpenRouter provider slugs to privacy classes:
+Maps OpenRouter provider slugs to privacy classes (unlisted → `Standard`):
 
 ```toml
 [registry.privacy]
 local = []
-zdr  = ["anthropic", "openai", "google"]
+zdr   = ["anthropic", "openai", "google"]
 ```
 
-Unlisted slugs → `Standard`.
+### Quality scores (Artificial Analysis)
+
+When enabled and `AA_API_KEY` is set, each model's Intelligence Index is pulled and feeds the `quality` score term (any profile with `weights.quality > 0`). Cached 24 h.
+
+```toml
+[registry.intelligence]
+enabled     = true
+api_key_env = "AA_API_KEY"
+ttl_seconds = 86400
+
+[registry.intelligence.aliases]   # map backend model id → AA slug
+"Qwen3.6-35B-A3B-bf16" = "qwen3-6-35b-a3b"
+```
 
 ### Custom profile
 
@@ -210,9 +255,31 @@ Unlisted slugs → `Standard`.
 [profiles.my_profile]
 weights = { cost = 0.6, latency = 0.2, context = 0.1, preference = 0.1 }
 max_price_out_per_mtok = 5.0
+backend_allowlist = ["omlx"]      # restrict to specific backends
+model_denylist = ["*:free"]       # glob patterns against the full model id
 provider_sort = "price"
-provider_require_parameters = true
 ```
+
+---
+
+## Admin app (macOS)
+
+A native SwiftUI menu-bar app in [`macos-admin/`](./macos-admin/) edits the whole config and controls the router — no TOML by hand.
+
+- **Backends** — toggle on/off, edit `kind` / `base_url` / `auth`, mark `local`; add or remove instances.
+- **Profiles** — weight sliders (with a live Σ), price/latency caps, all allow/deny lists, provider flags.
+- **Registry** — Intelligence config, privacy slugs, model overrides.
+- **Router** — start / stop / restart, live status dot polling `/v1/models`.
+
+Saving writes back through `router-admin` via `toml_edit`, so **comments and key order in `router.toml` survive** (a `.bak` is written first).
+
+```bash
+cd macos-admin
+./build-app.sh          # builds the Rust helpers + RouterAdmin.app
+open RouterAdmin.app     # icon appears in the menu bar
+```
+
+See [`macos-admin/README.md`](./macos-admin/README.md) for the architecture and a headless self-test.
 
 ---
 
@@ -223,8 +290,11 @@ provider_require_parameters = true
 | `OPENROUTER_API_KEY` | if OpenRouter enabled | — | OpenRouter API key |
 | `OMLX_HOST` | no | `http://127.0.0.1:8000` | oMLX server base URL |
 | `OMLX_API_KEY` | no | — | oMLX auth token (if configured) |
+| `AA_API_KEY` | if `[registry.intelligence]` enabled | — | Artificial Analysis key for quality scores |
 | `ROUTER_CONFIG` | no | `config/router.toml` | path to config file |
 | `RUST_LOG` | no | `info` | tracing filter (e.g. `router_core=debug`) |
+
+Env vars are loaded from `.env` (via `dotenvy`) at the working directory.
 
 ---
 
@@ -234,8 +304,10 @@ provider_require_parameters = true
 crates/
 ├── router-config/      TOML loader — Config, Profile, Weights
 ├── router-core/        expert system — norm · registry · rules · score · decision
-├── router-providers/   egress clients — OpenRouter · oMLX · LatencyTracker
-└── router-api/         Axum server — OpenAI + Anthropic handlers · routes
+├── router-providers/   egress clients — Provider trait · OpenRouter · openai_compat · Anthropic · LatencyTracker · AA
+├── router-api/         Axum server — OpenAI + Anthropic handlers · routes · fallback
+└── router-admin/       dump/apply JSON bridge for the admin app (comment-preserving toml_edit)
+macos-admin/            SwiftUI menu-bar admin app
 config/
 └── router.toml         profiles, backends, registry overrides
 .env.example            env var template
@@ -264,6 +336,30 @@ RUST_LOG=info,router_core=debug cargo run -p router-api
 
 The model registry is cached for 5 minutes (moka TTL). A restart forces a fresh fetch.
 
+> **macOS note:** if `cargo build` fails at the link step with `unknown command '…symbols.o'`, a Homebrew `cc` shim is shadowing Apple's compiler. The committed `.cargo/config.toml` pins the real `/usr/bin/cc`; keep it.
+
+---
+
+## Contributing
+
+A Cargo workspace ([layout above](#workspace-layout)) plus a Swift package under `macos-admin/`. To contribute:
+
+1. `cargo test --workspace` must stay green; add a test for any routing-logic change (the expert-system phases are unit-tested in `router-core`).
+2. Keep the expert system **deterministic** — no clocks, randomness, or network in scoring/filtering.
+3. Conventional Commits (`feat:` / `fix:` / `chore:` / `refactor:` / `docs:`).
+4. New backend? Implement the `Provider` trait in `router-providers` and add a `kind` to `router-config`.
+
+### What's changed since 0.1.0
+
+- **Arbitrary backends** via a `Provider` trait — `openai_compat` and native `anthropic` upstreams alongside OpenRouter.
+- **Quality scoring** — Artificial Analysis Intelligence Index as a fifth score term (`weights.quality`) + `min_intelligence_index` hard filter.
+- **Fallback cascade** — on an upstream 4xx/5xx the router walks down the ranked candidates instead of returning the error.
+- **macOS admin app** + `router-admin` comment-preserving config bridge.
+- API fixes — spec-compliant Anthropic stream close, honour `stream: false`, aggregate `tool_calls`/usage; case-insensitive oMLX override matching; `:free` denied by default.
+- Dependency + lint cleanup (dropped `tiktoken-rs`, `async-trait` where unused, `tower`, `tokio-stream`); removed the old xbar widget in favour of the admin app.
+
+Full list in [CHANGELOG](./CHANGELOG.md).
+
 ---
 
 ## Latency tracking
@@ -274,7 +370,14 @@ Every successful completion records the time-to-first-token. The `LatencyTracker
 
 ## Limitations / non-goals (v0.1)
 
-- No fallback cascade — a 503 from the chosen model is returned to the caller as-is.
 - No persistent metrics — latency data resets on restart.
-- No hot-reload — config changes require a restart.
+- No hot-reload — config changes require a restart (the admin app has a restart button).
 - Claude Max excluded — Anthropic's April 2026 ToS prohibits third-party proxying of Max subscriptions.
+
+---
+
+## License
+
+Released under the [MIT License](./LICENSE).
+
+Copyright © 2026 Markus.
