@@ -7,8 +7,7 @@ struct RouterAdminApp: App {
         MenuBarExtra {
             ContentView().environmentObject(state)
         } label: {
-            // Text label so it's unmistakably visible in the menu bar (a bare
-            // SF Symbol can hide behind the notch / be hard to spot).
+            // Text label so it's unmistakably visible in the menu bar (a bare SF Symbol can hide behind the notch / be hard to spot).
             Image(systemName: "slider.horizontal.3")
             Text("Router")
         }
@@ -16,8 +15,7 @@ struct RouterAdminApp: App {
     }
 }
 
-// Custom entry so a headless `--selftest` can exercise the Swift<->Rust config
-// round-trip without launching the menu-bar UI.
+// Custom entry so a headless `--selftest` can exercise the Swift<->Rust config round-trip without launching the menu-bar UI.
 @main
 struct Entry {
     static func main() {

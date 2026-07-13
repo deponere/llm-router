@@ -1,10 +1,4 @@
-//! Artificial-Analysis-Anbindung: holt den Intelligence-Index pro Modell vom
-//! öffentlichen API-Endpoint und cacht das Ergebnis. Liefert ein flaches
-//! `HashMap<String, AaScores>` zur Anreicherung von [`ModelCandidate`].
-//!
-//! Die Integration ist ausschließlich opt-in (`registry.intelligence.enabled`).
-//! Fehlt der API-Key oder schlägt der Aufruf fehl, ist die zurückgegebene Map
-//! leer und das Routing läuft genau wie vorher.
+//! Artificial-Analysis-Anbindung: holt den Intelligence-Index pro Modell vom öffentlichen API-Endpoint und cacht ihn als `HashMap<String, AaScores>` zur Anreicherung von [`ModelCandidate`]; rein opt-in (`registry.intelligence.enabled`), fehlt Key oder Aufruf, bleibt die Map leer und das Routing läuft wie vorher.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -25,8 +19,7 @@ pub enum AaError {
     Upstream { status: u16, body: String },
 }
 
-/// Wichtige Metriken pro Modell. Felder sind alle optional, weil die API für
-/// neue/seltene Modelle nicht alle Indizes liefert.
+/// Wichtige Metriken pro Modell. Felder sind alle optional, weil die API für neue/seltene Modelle nicht alle Indizes liefert.
 #[derive(Debug, Clone, Default)]
 pub struct AaScores {
     pub intelligence_index: Option<f64>,
@@ -36,8 +29,7 @@ pub struct AaScores {
     pub median_time_to_first_token_seconds: Option<f64>,
 }
 
-/// Lookup-Tabelle: Modell-Slug (lowercase) -> Scores. Slug ist der `id`-Wert
-/// aus der AA-API; das Mapping zur Router-Modell-ID übernimmt `match_router_id`.
+/// Lookup-Tabelle: Modell-Slug (lowercase) -> Scores. Slug ist der `id`-Wert aus der AA-API; das Mapping zur Router-Modell-ID übernimmt `match_router_id`.
 pub type AaIndex = Arc<HashMap<String, AaScores>>;
 
 #[derive(Clone)]
@@ -76,10 +68,7 @@ impl ArtificialAnalysisClient {
         self.cfg.enabled && self.api_key.is_some()
     }
 
-    /// Liefert den AA-Slug für eine Router-Modell-ID. Reihenfolge:
-    /// 1. expliziter Eintrag in `registry.intelligence.aliases`
-    /// 2. Suffix nach dem letzten `/` (OpenRouter-Format), `:free` u. ä.
-    ///    Tag-Suffixe abgestrippt, lowercase, Punkt -> Bindestrich
+    /// Liefert den AA-Slug für eine Router-Modell-ID: erst `registry.intelligence.aliases`, sonst Suffix nach dem letzten `/` (OpenRouter-Format) mit abgestripptem Tag-Suffix, lowercase, Punkt -> Bindestrich.
     pub fn aa_slug_for(&self, router_id: &str) -> String {
         if let Some(alias) = self.aliases.get(router_id) {
             return alias.to_lowercase();

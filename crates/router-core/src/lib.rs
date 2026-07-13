@@ -1,6 +1,4 @@
-//! Deterministischer Kern des Routers: Request-Normalisierung, Modell-Registry,
-//! Hard-Filter und Scoring. Enthält keinerlei I/O — das übernimmt
-//! `router-providers`.
+//! Deterministischer Kern des Routers: Request-Normalisierung, Modell-Registry, Hard-Filter und Scoring. Enthält keinerlei I/O — das übernimmt `router-providers`.
 
 pub mod norm;
 pub mod registry;

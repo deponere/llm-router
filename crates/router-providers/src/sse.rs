@@ -1,5 +1,4 @@
-//! Low-Level-SSE-Parsing, geteilt zwischen den Egress-Clients (Anthropic-
-//! Übersetzer) und dem API-Layer.
+//! Low-Level-SSE-Parsing, geteilt zwischen den Egress-Clients (Anthropic-Übersetzer) und dem API-Layer.
 
 /// Position des nächsten Event-Trenners (`\n\n` oder `\r\n\r\n`) im Puffer.
 pub fn find_event_boundary(buf: &[u8]) -> Option<usize> {

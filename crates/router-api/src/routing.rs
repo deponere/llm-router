@@ -1,5 +1,4 @@
-//! Kleine Helfer, die den Entscheidungs-Flow zwischen NormRequest und
-//! konkreten Backends kapseln.
+//! Kleine Helfer, die den Entscheidungs-Flow zwischen NormRequest und konkreten Backends kapseln.
 
 use router_core::{
     decide, profile::ResolvedProfile, registry::Registry, Decision, ModelCandidate, NormRequest,
@@ -21,11 +20,7 @@ pub fn decide_for(
     Ok((profile, decision))
 }
 
-/// Resolves the synthetic auto-routing models that `/v1/models` advertises:
-/// `auto` routes with the header/body profile, and `<profile>/auto` routes with
-/// that profile. This lets GUI clients (Msty etc.) pick auto-routing — and a
-/// profile — from the model dropdown instead of setting a header. Rewrites
-/// `model_hint` back to plain `"auto"` so the hard filter doesn't try to pin it.
+/// Resolves the synthetic `<profile>/auto` models `/v1/models` advertises so GUI clients can pick a profile from the dropdown; rewrites `model_hint` back to plain `"auto"` so the hard filter doesn't try to pin it.
 pub fn resolve_auto_alias(norm: &mut NormRequest, cfg: &router_config::Config) {
     let Some(hint) = norm.model_hint.as_deref() else { return };
     if let Some(prof) = hint.strip_suffix("/auto") {
@@ -58,9 +53,7 @@ pub fn parse_privacy_tag(s: Option<&str>) -> router_core::PrivacyTag {
     }
 }
 
-/// Druckt eine einzeilige, farbige Routing-Entscheidung direkt auf stdout.
-/// Unabhängig vom `RUST_LOG`-Level — damit der Betreiber jede Anfrage
-/// sofort mitlesen kann.
+/// Druckt eine einzeilige, farbige Routing-Entscheidung direkt auf stdout, unabhängig vom `RUST_LOG`-Level.
 pub fn announce_decision(api: &str, profile: &ResolvedProfile, decision: &Decision, req: &NormRequest) {
     const RESET: &str = "\x1b[0m";
     const DIM:   &str = "\x1b[2m";
@@ -97,8 +90,7 @@ pub fn announce_decision(api: &str, profile: &ResolvedProfile, decision: &Decisi
     );
 }
 
-/// Druckt eine Fallback-Zeile, wenn ein Modell beim Setup mit Upstream-Fehler
-/// scheitert und der Router auf das nächstbeste Modell ausweicht.
+/// Druckt eine Fallback-Zeile, wenn ein Modell mit Upstream-Fehler scheitert und der Router auf das nächstbeste Modell ausweicht.
 pub fn announce_fallback(api: &str, failed: &str, next: &str, error: &str) {
     const RESET:  &str = "\x1b[0m";
     const DIM:    &str = "\x1b[2m";
@@ -112,8 +104,7 @@ pub fn announce_fallback(api: &str, failed: &str, next: &str, error: &str) {
     );
 }
 
-/// Maximale Anzahl von Modellen, die der Router pro Request durchprobiert,
-/// bevor er den letzten Upstream-Fehler an den Caller zurückreicht.
+/// Maximale Anzahl von Modellen, die der Router pro Request durchprobiert, bevor er den letzten Upstream-Fehler zurückreicht.
 pub const FALLBACK_MAX_ATTEMPTS: usize = 3;
 
 /// Öffnet den Byte-Stream eines einzelnen Kandidaten beim passenden Backend.
@@ -132,9 +123,7 @@ async fn open_stream(
         .map_err(|e| ApiError::Upstream(e.to_string()))
 }
 
-/// Probiert Winner + Alternativen der Reihe nach durch, bis ein Backend-Stream
-/// aufgeht. `make_body` baut den Upstream-Body pro Kandidat (OpenAI reicht den
-/// Original-Body durch, Anthropic übersetzt erst nach OpenAI-Schema).
+/// Probiert Winner + Alternativen der Reihe nach durch, bis ein Backend-Stream aufgeht; `make_body` baut den Upstream-Body pro Kandidat.
 pub(crate) async fn stream_with_fallback(
     state: &AppState,
     profile: &ResolvedProfile,

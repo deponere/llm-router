@@ -1,5 +1,4 @@
-//! Profil-Auflösung: fertig gemergte `ResolvedProfile`-Struktur, mit der
-//! Hard-Filter und Scoring arbeiten.
+//! Profil-Auflösung: fertig gemergte `ResolvedProfile`-Struktur, mit der Hard-Filter und Scoring arbeiten.
 
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -44,8 +43,7 @@ impl ResolvedProfile {
             .iter()
             .filter_map(|s| PrivacyClass::from_str(s).ok())
             .collect();
-        // Backend-IDs case-insensitiv normalisieren, damit das Profil sowohl
-        // "OpenRouter" als auch "openrouter" akzeptiert.
+        // Backend-IDs case-insensitiv normalisieren, damit das Profil sowohl "OpenRouter" als auch "openrouter" akzeptiert.
         let backend_allowlist: HashSet<String> = p
             .backend_allowlist
             .iter()
@@ -75,8 +73,7 @@ impl ResolvedProfile {
         }
     }
 
-    /// Löst einen Profilnamen (oder `None`) gegen die Config auf. Fällt auf
-    /// `default` zurück, wenn der Name unbekannt ist.
+    /// Löst einen Profilnamen (oder `None`) gegen die Config auf, mit Fallback auf `default` bei unbekanntem Namen.
     pub fn resolve(cfg: &Config, hint: Option<&str>) -> Self {
         let name = hint.unwrap_or("default");
         let picked = cfg

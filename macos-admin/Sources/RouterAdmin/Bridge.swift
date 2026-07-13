@@ -136,8 +136,7 @@ final class AppState: ObservableObject {
             p.terminate()
             routerProcess = nil
         }
-        // Auch verwaiste Router (z. B. aus früherer Session) treffen — Pattern
-        // endet auf /router, matcht also nicht router-admin.
+        // Auch verwaiste Router treffen — Pattern endet auf /router, matcht also nicht router-admin.
         _ = try? run("/usr/bin/pkill", ["-f", "target/(release|debug)/router$"])
         message = "Router gestoppt."
     }
@@ -167,8 +166,7 @@ final class AppState: ObservableObject {
                 await MainActor.run { self.status = .stopped; self.snapshot = nil }
                 return
             }
-            // Transaktions-Snapshot separat holen; ein Fehler hier lässt den
-            // Health-Status unberührt.
+            // Transaktions-Snapshot separat holen; ein Fehler hier lässt den Health-Status unberührt.
             var txReq = URLRequest(url: txURL)
             txReq.timeoutInterval = 1.5
             if let (data, _) = try? await URLSession.shared.data(for: txReq),

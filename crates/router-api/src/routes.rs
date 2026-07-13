@@ -6,16 +6,11 @@ use tower_http::trace::TraceLayer;
 
 use crate::state::AppState;
 
-/// Obergrenze für eingehende Request-Bodies (8 MiB). Deckt große
-/// Multimodal-/Tool-Payloads ab, verhindert aber unbegrenzte Allokation aus
-/// einem einzelnen Request.
+/// Obergrenze für eingehende Request-Bodies (8 MiB) — deckt große Multimodal-/Tool-Payloads ab, verhindert aber unbegrenzte Allokation pro Request.
 const MAX_BODY_BYTES: usize = 8 * 1024 * 1024;
 
 pub fn build(state: AppState) -> Router {
-    // ponytail: allow_origin(Any) ist für den local-only-Betrieb bewusst offen,
-    // damit lokale Browser-UIs auf beliebigen Ports zugreifen können. Wenn der
-    // Server je an eine Netzwerkadresse gebunden wird: auf konkrete Origins
-    // einschränken (AllowOrigin::list / ::predicate).
+    // ponytail: allow_origin(Any) ist für local-only bewusst offen, bei Netzwerk-Bind auf konkrete Origins einschränken (AllowOrigin::list / ::predicate).
     let cors = CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any);
 
     Router::new()

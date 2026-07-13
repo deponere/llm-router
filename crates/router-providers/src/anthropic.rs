@@ -1,8 +1,4 @@
-//! Nativer Anthropic-Egress (`/v1/messages`). Einziges Backend mit echtem
-//! Protokoll-Übersetzer: eingehende OpenAI-Chat-Completions-Bodies werden nach
-//! Anthropic-Messages übersetzt, und der Anthropic-SSE-Stream wird **zurück**
-//! in OpenAI-Chat-Completions-SSE übersetzt, damit die restliche Pipeline
-//! (Aggregation, Anthropic-Ingress-Reencoding) unverändert bleibt.
+//! Nativer Anthropic-Egress (`/v1/messages`): übersetzt OpenAI-Chat-Completions-Bodies nach Anthropic-Messages und den Anthropic-SSE-Stream zurück nach OpenAI-SSE, damit der Rest der Pipeline unverändert bleibt.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -97,8 +93,7 @@ impl Provider for AnthropicClient {
 }
 
 impl AnthropicClient {
-    /// Anthropic `/models` liefert nur IDs; Claude-Modelle können durchweg
-    /// Tools, Vision und Reasoning — Preise/Feinheiten trägt ein Override nach.
+    /// Anthropic `/models` liefert nur IDs; Claude-Modelle können durchweg Tools, Vision und Reasoning — Preise/Feinheiten trägt ein Override nach.
     fn to_candidate(&self, id: String) -> ModelCandidate {
         ModelCandidate {
             backend_id: self.id.clone(),
@@ -121,14 +116,10 @@ impl AnthropicClient {
 
 // --- Request-Übersetzung: OpenAI Chat Completions -> Anthropic Messages ---
 
-/// Baut aus einem OpenAI-Chat-Completions-Body einen Anthropic-`/v1/messages`-
-/// Body. `system`-Rollen werden zum Top-Level-`system` gehoben, `tool_calls`/
-/// `tool`-Rollen zu Anthropic `tool_use`/`tool_result`-Blöcken. `max_tokens`
-/// ist bei Anthropic Pflicht — fehlt es, wird `default_max_tokens` gesetzt.
+/// Baut aus einem OpenAI-Chat-Completions-Body einen Anthropic-`/v1/messages`-Body: hebt `system`-Rollen hoch, mappt tool_calls/tool zu tool_use/tool_result, setzt `max_tokens` falls fehlend.
 fn openai_to_anthropic_body(body: &Value, model_id: &str, default_max_tokens: u32) -> Value {
     let mut system = String::new();
-    // (role, content_blocks) mit Merge aufeinanderfolgender gleicher Rollen —
-    // Anthropic erwartet keine zwei consecutive messages derselben Rolle.
+    // (role, content_blocks) mit Merge aufeinanderfolgender gleicher Rollen — Anthropic erlaubt keine zwei consecutive messages derselben Rolle.
     let mut turns: Vec<(String, Vec<Value>)> = Vec::new();
     let mut push_blocks = |role: &str, blocks: Vec<Value>| {
         if blocks.is_empty() {
@@ -289,8 +280,7 @@ fn content_to_blocks(v: Option<&Value>) -> Vec<Value> {
     }
 }
 
-/// Baut einen Anthropic-Image-Block aus einer OpenAI-`image_url` (data-URI oder
-/// http-URL).
+/// Baut einen Anthropic-Image-Block aus einer OpenAI-`image_url` (data-URI oder http-URL).
 fn image_block(url: &str) -> Value {
     if let Some(rest) = url.strip_prefix("data:") {
         // data:<mime>;base64,<data>
@@ -316,9 +306,7 @@ struct TransState {
     input_tokens: u64,
 }
 
-/// Übersetzt einen Anthropic-`/v1/messages`-SSE-Stream in einen
-/// OpenAI-Chat-Completions-SSE-Stream (`data: {…}\n\n`, abgeschlossen mit
-/// `data: [DONE]`).
+/// Übersetzt einen Anthropic-`/v1/messages`-SSE-Stream in einen OpenAI-Chat-Completions-SSE-Stream, abgeschlossen mit `data: [DONE]`.
 fn anthropic_sse_to_openai(inner: ByteStream) -> ByteStream {
     let mut st = TransState::default();
     let s = inner.flat_map(move |chunk| {
@@ -354,8 +342,7 @@ fn sse_bytes(v: &Value) -> bytes::Bytes {
     bytes::Bytes::from(format!("data: {}\n\n", v))
 }
 
-/// Übersetzt ein einzelnes Anthropic-Event in 0..n OpenAI-Chat-Completions-
-/// Chunks (als JSON-Werte).
+/// Übersetzt ein einzelnes Anthropic-Event in 0..n OpenAI-Chat-Completions-Chunks (als JSON-Werte).
 fn translate_event(ev: &Value, st: &mut TransState) -> Vec<Value> {
     match ev.get("type").and_then(|v| v.as_str()) {
         Some("message_start") => {

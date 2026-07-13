@@ -1,8 +1,4 @@
-//! Typisierter Loader für `config/router.toml`.
-//!
-//! Der Loader ist bewusst nur passiv: er liest TOML und stellt typisierte
-//! Strukturen bereit. Auflösungslogik (Profil mergen, Env-Variablen ziehen)
-//! passiert im Konsumenten (`router-core` / `router-api`).
+//! Typisierter, bewusst passiver Loader für `config/router.toml`: liest TOML und stellt Strukturen bereit, Auflösungslogik (Profil-Merge, Env-Variablen) passiert im Konsumenten (`router-core` / `router-api`).
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -33,9 +29,7 @@ pub struct ServerConfig {
     pub bind: String,
 }
 
-/// Alle konfigurierten Backend-Instanzen, Key = Backend-ID (z. B. "openai",
-/// "groq", "anthropic", "omlx", "openrouter"). Der Key wird zum `backend_id`
-/// jedes Modells und dient als Dispatch- und Metrics-Schlüssel.
+/// Alle konfigurierten Backend-Instanzen, Key = Backend-ID (z. B. "openai", "groq", "anthropic"); dient als `backend_id` für Dispatch und Metrics.
 pub type BackendsConfig = BTreeMap<String, BackendConfig>;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -44,17 +38,11 @@ pub struct BackendConfig {
     pub enabled: bool,
     /// Bestimmt Protokoll + Header-Schema (siehe [`BackendKind`]).
     pub kind: BackendKind,
-    /// Voller URL-Prefix inkl. Versionssegment. Der Client hängt `/models`
-    /// bzw. `/chat/completions` an. Beispiele:
-    ///   - `https://api.openai.com/v1`
-    ///   - `https://openrouter.ai/api/v1`
-    ///   - `http://localhost:11434/v1` (Ollama)
-    ///   - `https://generativelanguage.googleapis.com/v1beta/openai` (Gemini)
+    /// Voller URL-Prefix inkl. Versionssegment, an den der Client `/models` bzw. `/chat/completions` anhängt (z. B. OpenAI, OpenRouter, Ollama, Gemini).
     pub base_url: String,
     #[serde(default)]
     pub auth: AuthConfig,
-    /// Lokales Backend (Ollama/LM Studio/oMLX): gewinnt bei Score-Gleichstand
-    /// und bekommt standardmäßig die Privacy-Klasse `Local`.
+    /// Lokales Backend (Ollama/LM Studio/oMLX): gewinnt bei Score-Gleichstand und bekommt standardmäßig die Privacy-Klasse `Local`.
     #[serde(default)]
     pub local: bool,
     /// Nur `kind = "openrouter"`: optionale Attributions-Header.
@@ -70,28 +58,22 @@ pub struct BackendConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BackendKind {
-    /// Generischer OpenAI-kompatibler Server (OpenAI, Groq, DeepSeek, xAI,
-    /// Mistral, Gemini-OpenAI-Endpoint, Ollama, LM Studio, oMLX …).
+    /// Generischer OpenAI-kompatibler Server (OpenAI, Groq, DeepSeek, xAI, Mistral, Ollama, oMLX …).
     OpenaiCompat,
     /// OpenRouter-Aggregator: reiches `/models`-Schema + `provider`-Block.
     Openrouter,
-    /// Anthropic nativ (`/v1/messages`): Egress-Client übersetzt in beide
-    /// Richtungen OpenAI ↔ Anthropic.
+    /// Anthropic nativ (`/v1/messages`): Egress-Client übersetzt bidirektional OpenAI ↔ Anthropic.
     Anthropic,
 }
 
-/// Auth-Verfahren pro Backend. OAuth ist bewusst noch nicht enthalten —
-/// die Enum ist über `#[serde(tag = "type")]` trivial um eine `oauth`-Variante
-/// mit Token-Refresh erweiterbar, sobald ein konkreter Provider sie braucht.
+/// Auth-Verfahren pro Backend; OAuth fehlt bewusst noch, die Enum ist per `#[serde(tag = "type")]` trivial um eine `oauth`-Variante erweiterbar, sobald ein Provider sie braucht.
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AuthConfig {
     /// Keine Auth (lokale Server ohne Key).
     #[default]
     None,
-    /// Secret aus einer Umgebungsvariable. Header-Schema bestimmt der
-    /// `BackendKind` (Bearer bei OpenAI-compat/OpenRouter, `x-api-key` bei
-    /// Anthropic).
+    /// Secret aus einer Umgebungsvariable; Header-Schema bestimmt der `BackendKind` (Bearer bei OpenAI-compat/OpenRouter, `x-api-key` bei Anthropic).
     ApiKey { env: String },
 }
 
@@ -105,10 +87,7 @@ pub struct RegistryConfig {
     pub intelligence: IntelligenceConfig,
 }
 
-/// Konfiguration für die Artificial-Analysis-Anbindung.
-/// Wenn `enabled = false` (Default) oder kein API-Key gesetzt, wird der
-/// Score-Term `quality` für alle Modelle 0.0 — bestehender Betrieb bleibt
-/// unverändert.
+/// Konfiguration für die Artificial-Analysis-Anbindung: ohne `enabled = true` oder API-Key bleibt der Score-Term `quality` 0.0, bestehender Betrieb unverändert.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct IntelligenceConfig {
     #[serde(default)]
@@ -120,8 +99,7 @@ pub struct IntelligenceConfig {
     /// Cache-TTL in Sekunden. Default: 24 h.
     #[serde(default = "default_aa_ttl")]
     pub ttl_seconds: u64,
-    /// Optionales explizites Mapping: Router-Modell-ID -> Artificial-Analysis-Slug.
-    /// Hat Vorrang vor Heuristiken (Suffix-Match nach `/`, Punkt-zu-Bindestrich).
+    /// Optionales explizites Mapping Router-Modell-ID -> Artificial-Analysis-Slug, hat Vorrang vor Heuristiken (Suffix-Match, Punkt-zu-Bindestrich).
     #[serde(default)]
     pub aliases: BTreeMap<String, String>,
 }
@@ -189,9 +167,7 @@ pub struct Profile {
     #[serde(default)]
     pub provider_ignore: Vec<String>,
 
-    /// Hard-Filter: Modell muss einen Artificial-Analysis-Intelligence-Index
-    /// >= diesem Wert haben. Modelle ohne Bewertung werden ebenfalls gefiltert.
-    /// > `None` = kein Filter.
+    /// Hard-Filter: Modell muss Artificial-Analysis-Intelligence-Index >= diesem Wert haben (unbewertete werden gefiltert); `None` = kein Filter.
     #[serde(default)]
     pub min_intelligence_index: Option<f64>,
 }
@@ -206,8 +182,7 @@ pub struct Weights {
     pub context: f64,
     #[serde(default)]
     pub preference: f64,
-    /// Gewicht für den Artificial-Analysis-Intelligence-Index.
-    /// Modelle ohne Bewertung scoren 0 in diesem Term.
+    /// Gewicht für den Artificial-Analysis-Intelligence-Index; unbewertete Modelle scoren 0 in diesem Term.
     #[serde(default)]
     pub quality: f64,
 }
@@ -223,8 +198,7 @@ impl Weights {
         self.cost + self.latency + self.context + self.preference + self.quality
     }
 
-    /// Gibt die Gewichte so zurück, dass sie auf 1.0 summieren. Wenn alle Null sind,
-    /// fällt auf gleichverteilt zurück.
+    /// Gibt die Gewichte normalisiert auf Summe 1.0 zurück, fällt bei lauter Null auf gleichverteilt zurück.
     pub fn normalized(&self) -> Self {
         let s = self.sum();
         if s <= f64::EPSILON {

@@ -1,5 +1,4 @@
-//! In-Memory-Ring-Buffer aller abgeschlossenen Requests, exponiert für die
-//! Kostenverfolgung im Dashboard.
+//! In-Memory-Ring-Buffer aller abgeschlossenen Requests, exponiert für die Kostenverfolgung im Dashboard.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -80,8 +79,7 @@ pub struct Totals {
     pub cost_usd: f64,
     pub count: usize,
     pub tokens_out: u64,
-    /// Ausgabe-Tokens geteilt durch die aufsummierte Aufrufdauer (grobe
-    /// Durchsatz-Näherung inkl. Netzwerk/Queue, nicht reine Generierungsrate).
+    /// Ausgabe-Tokens geteilt durch die aufsummierte Aufrufdauer (grobe Durchsatz-Näherung inkl. Netzwerk/Queue, nicht reine Generierungsrate).
     pub tokens_per_sec: f64,
 }
 
@@ -113,8 +111,7 @@ fn totals_since(entries: &VecDeque<Transaction>, since: u64) -> Totals {
     Totals { cost_usd: cost, count, tokens_out, tokens_per_sec }
 }
 
-/// Aktuelle Unix-Zeit in Sekunden. Geteilt von den Handlern fürs
-/// Transaction-Logging.
+/// Aktuelle Unix-Zeit in Sekunden. Geteilt von den Handlern fürs Transaction-Logging.
 pub fn now_unix() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }

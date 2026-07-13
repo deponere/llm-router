@@ -1,7 +1,4 @@
-//! Generischer OpenAI-kompatibler Client. Eine Instanz pro konfiguriertem
-//! Backend (OpenAI, Groq, DeepSeek, xAI, Mistral, Gemini-OpenAI-Endpoint,
-//! Ollama, LM Studio, oMLX …). Ruft `{base_url}/models` und
-//! `{base_url}/chat/completions` und reicht den SSE-Stream 1:1 durch.
+//! Generischer OpenAI-kompatibler Client. Eine Instanz pro konfiguriertem Backend (OpenAI, Groq, DeepSeek, xAI, Mistral, Gemini-OpenAI-Endpoint, Ollama, LM Studio, oMLX …); ruft `{base_url}/models` und `{base_url}/chat/completions` und reicht den SSE-Stream 1:1 durch.
 
 use std::time::Duration;
 
@@ -90,8 +87,7 @@ impl Provider for OpenAiCompatClient {
         if let serde_json::Value::Object(map) = &mut body {
             map.insert("model".into(), serde_json::Value::String(model_id.into()));
             map.insert("stream".into(), serde_json::Value::Bool(true));
-            // "provider"-Block ist OpenRouter-spezifisch — falls aus einem
-            // vorherigen Mapping hängengeblieben, rauswerfen.
+            // "provider"-Block ist OpenRouter-spezifisch — falls aus einem vorherigen Mapping hängengeblieben, rauswerfen.
             map.remove("provider");
         }
         let req = self
@@ -109,9 +105,7 @@ impl Provider for OpenAiCompatClient {
 }
 
 impl OpenAiCompatClient {
-    /// Baut aus einem `/models`-Eintrag einen Kandidaten. OpenAI-compat-Server
-    /// liefern oft nur `id` — Context/Modalitäten/Caps ergänzen Heuristik über
-    /// die ID und (Vorrang) `[[registry.overrides]]` aus der Config.
+    /// Baut aus einem `/models`-Eintrag einen Kandidaten. OpenAI-compat-Server liefern oft nur `id` — Context/Modalitäten/Caps ergänzen Heuristik über die ID und (Vorrang) `[[registry.overrides]]` aus der Config.
     fn to_candidate(&self, m: ApiModel, cfg: &RegistryConfig) -> ModelCandidate {
         let ctx = m.context_length.or(m.max_context_length).unwrap_or(32_768);
         let mut input_modalities = if m.modalities.is_empty() {
@@ -153,8 +147,7 @@ impl OpenAiCompatClient {
             provider_slug: m.owned_by.unwrap_or_else(|| self.id.clone()),
             context_length: ctx,
             max_completion_tokens: None,
-            // Preise kennt ein generischer OpenAI-compat-Endpoint nicht; lokale
-            // Server sind gratis, Cloud-Preise trägt ggf. ein Override nach.
+            // Preise kennt ein generischer OpenAI-compat-Endpoint nicht; lokale Server sind gratis, Cloud-Preise trägt ggf. ein Override nach.
             price_in_per_mtok: 0.0,
             price_out_per_mtok: 0.0,
             input_modalities,

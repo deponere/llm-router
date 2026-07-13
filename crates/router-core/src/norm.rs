@@ -87,9 +87,7 @@ pub struct RequiredCaps {
     pub caps: CapsSet,
 }
 
-/// Der interne, vereinheitlichte Request. Baut sich aus OpenAI- oder
-/// Anthropic-Eingang zusammen. Alle abgeleiteten Felder (`required`,
-/// `prompt_tokens_est`) werden vom Feature-Detector gesetzt.
+/// Der interne, vereinheitlichte Request aus OpenAI- oder Anthropic-Eingang; abgeleitete Felder (`required`, `prompt_tokens_est`) setzt der Feature-Detector.
 #[derive(Debug, Clone, Default)]
 pub struct NormRequest {
     pub messages: Vec<NormMessage>,
@@ -106,8 +104,7 @@ pub struct NormRequest {
     // Header/Body-Hints für den Router:
     pub profile_hint: Option<String>,
     pub privacy_tag: PrivacyTag,
-    /// Vom Client bevorzugtes Modell, z. B. "anthropic/claude-sonnet-4-6". `"auto"` oder leer
-    /// heißt: komplett dem Expertensystem überlassen.
+    /// Vom Client bevorzugtes Modell, z. B. "anthropic/claude-sonnet-4-6"; `"auto"` oder leer heißt komplett dem Expertensystem überlassen.
     pub model_hint: Option<String>,
 
     // Abgeleitet durch [`detect_required`]:
@@ -147,8 +144,7 @@ impl NormRequest {
     }
 }
 
-/// Rohe Zeichenanzahl / 4 als stabile Schätzung.
-/// Genau genug für Context-Filter (+Reserve), weil wir eh Reserve aufschlagen.
+/// Rohe Zeichenanzahl / 4 als stabile Schätzung, genau genug für den Context-Filter dank Reserve-Aufschlag.
 pub fn estimate_tokens(messages: &[NormMessage]) -> u32 {
     // Wir addieren eine kleine Pauschale pro Nachricht (Rolle + Separator-Tokens).
     let per_message_overhead: u32 = 4;

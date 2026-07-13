@@ -1,8 +1,4 @@
-//! Anthropic-kompatible Handler: `/v1/messages`.
-//!
-//! Wir übersetzen den Anthropic-Request in einen internen `NormRequest`,
-//! lassen das Expertensystem entscheiden und pipen die Antwort (die wir als
-//! OpenAI-Chat-Completion abholen) als Anthropic-Event-Stream zurück.
+//! Anthropic-kompatible Handler: `/v1/messages` — übersetzt in `NormRequest`, lässt das Expertensystem entscheiden und pipet die Antwort als Anthropic-Event-Stream zurück.
 
 use std::time::Instant;
 
@@ -57,8 +53,7 @@ pub async fn messages(
     )
     .await?;
 
-    // Non-Stream: Upstream-SSE absammeln und zu einem Anthropic-Messages-Body
-    // aggregieren (Clients mit `stream: false` erwarten JSON, kein SSE).
+    // Non-Stream: Upstream-SSE absammeln und zu einem Anthropic-Messages-Body aggregieren (Clients mit `stream: false` erwarten JSON).
     if !norm.stream {
         let bytes = collect_stream(byte_stream).await?;
         let elapsed = started.elapsed();
@@ -214,8 +209,7 @@ fn anthropic_content(v: Option<&Value>) -> (String, Vec<router_core::ImagePart>)
     }
 }
 
-/// Baut aus dem internen `NormRequest` einen OpenAI-Chat-Completions-Body.
-/// Das ist, was OpenRouter und oMLX beide konsumieren.
+/// Baut aus dem internen `NormRequest` einen OpenAI-Chat-Completions-Body, den OpenRouter und oMLX beide konsumieren.
 fn norm_to_openai(req: &NormRequest, model_id: &str, stream: bool) -> Value {
     let mut messages = Vec::new();
     for m in &req.messages {
@@ -264,10 +258,7 @@ fn norm_to_openai(req: &NormRequest, model_id: &str, stream: bool) -> Value {
     body
 }
 
-/// Pipet einen OpenAI-SSE-Byte-Stream in Anthropic-`/v1/messages`-Events.
-/// Wir emittieren eine einfache Delta-Spur: `message_start`, `content_block_start`,
-/// `content_block_delta` pro Text-Chunk, `content_block_stop`, `message_delta`,
-/// `message_stop`.
+/// Pipet einen OpenAI-SSE-Byte-Stream in Anthropic-`/v1/messages`-Events: `message_start`, `content_block_start`, `content_block_delta` pro Text-Chunk, `content_block_stop`, `message_delta`, `message_stop`.
 fn openai_sse_to_anthropic<S, F>(
     inner: S,
     model_id: String,
@@ -283,8 +274,7 @@ where
     let msg_id = format!("msg_{}", uuid::Uuid::new_v4().simple());
     let cost_cell = std::sync::Arc::new(std::sync::Mutex::new(Option::<f64>::None));
     let cost_cell_for_closure = cost_cell.clone();
-    // Von mid_stream ans closing durchgereicht, damit die Abschluss-Events
-    // (content_block_stop / message_delta) korrekt gebaut werden können.
+    // Von mid_stream ans closing durchgereicht, damit die Abschluss-Events (content_block_stop / message_delta) korrekt gebaut werden können.
     let block_open = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let block_open_mid = block_open.clone();
     let stop_reason_cell = std::sync::Arc::new(std::sync::Mutex::new(Option::<String>::None));
@@ -422,9 +412,7 @@ fn map_stop_reason(openai: &str) -> &'static str {
     }
 }
 
-/// Baut die Abschluss-Event-Sequenz eines `/v1/messages`-Streams nach
-/// Anthropic-Spec: `content_block_stop` (nur wenn ein Block geöffnet wurde),
-/// dann `message_delta` (mit `stop_reason` + `usage`), dann `message_stop`.
+/// Baut die Abschluss-Event-Sequenz eines `/v1/messages`-Streams nach Anthropic-Spec: `content_block_stop` (falls Block offen), dann `message_delta`, dann `message_stop`.
 fn closing_events(block_open: bool, stop_reason: &str, output_tokens: u64) -> Vec<(&'static str, Value)> {
     let mut ev = Vec::new();
     if block_open {
@@ -442,8 +430,7 @@ fn closing_events(block_open: bool, stop_reason: &str, output_tokens: u64) -> Ve
     ev
 }
 
-/// Baut aus einem abgesammelten OpenAI-Completion-Stream einen
-/// Anthropic-`/v1/messages`-Non-Stream-Body.
+/// Baut aus einem abgesammelten OpenAI-Completion-Stream einen Anthropic-`/v1/messages`-Non-Stream-Body.
 fn anthropic_body_from(acc: &Accumulated, model_id: &str) -> Value {
     let mut content: Vec<Value> = Vec::new();
     if !acc.content.is_empty() {

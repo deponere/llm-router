@@ -1,6 +1,4 @@
-//! OpenRouter-Client: Modell-Katalog und Chat-Completions. Sonderfall unter
-//! den Backends: reiches `/models`-Schema (Pricing/Modalitäten/Caps) +
-//! `provider`-Block aus dem Profil + Privacy-Overlay über die Sub-Provider.
+//! OpenRouter-Client: Modell-Katalog und Chat-Completions. Sonderfall unter den Backends: reiches `/models`-Schema (Pricing/Modalitäten/Caps) + `provider`-Block aus dem Profil + Privacy-Overlay über die Sub-Provider.
 
 use std::time::Duration;
 
@@ -83,8 +81,7 @@ impl Provider for OpenRouterClient {
         if let serde_json::Value::Object(map) = &mut body {
             map.insert("model".into(), serde_json::Value::String(model_id.into()));
             map.insert("stream".into(), serde_json::Value::Bool(true));
-            // Kosten auch im Stream mitliefern lassen — OpenRouter haengt ein
-            // zusaetzliches usage-Event mit `cost` an, sobald das hier true ist.
+            // Kosten auch im Stream mitliefern lassen — OpenRouter haengt ein zusaetzliches usage-Event mit `cost` an, sobald das hier true ist.
             map.insert("usage".into(), serde_json::json!({ "include": true }));
             if let Some(provider) = build_provider_block(profile) {
                 map.insert("provider".into(), provider);
@@ -118,8 +115,7 @@ impl Provider for OpenRouterClient {
     }
 }
 
-/// Setzt den OpenRouter-`provider`-Block aus dem Profil. Gibt `None` zurück,
-/// wenn keiner der Schalter gesetzt ist.
+/// Setzt den OpenRouter-`provider`-Block aus dem Profil. Gibt `None` zurück, wenn keiner der Schalter gesetzt ist.
 pub fn build_provider_block(profile: &ResolvedProfile) -> Option<serde_json::Value> {
     let mut obj = serde_json::Map::new();
     if let Some(b) = profile.provider_require_parameters {
@@ -242,8 +238,7 @@ pub struct PublicModelEntry {
     pub price_out_per_mtok: f64,
 }
 
-/// Wandelt das Pricing-Feld (USD pro Token, als String oder Zahl) in
-/// USD pro 1 Million Tokens um.
+/// Wandelt das Pricing-Feld (USD pro Token, als String oder Zahl) in USD pro 1 Million Tokens um.
 fn pricing_to_per_mtok(v: &Option<serde_json::Value>) -> f64 {
     let Some(val) = v else { return 0.0 };
     let per_token = match val {
@@ -271,8 +266,7 @@ impl OpenRouterClient {
         };
         let supports = CapsSet::from_supported_parameters(&m.supported_parameters);
         let slug = provider_slug(&m.id);
-        // Privacy-Overlay: OpenRouter bündelt viele Sub-Provider, deren
-        // Datenschutz-Klasse aus den Config-Listen kommt (Slug vor dem `/`).
+        // Privacy-Overlay: OpenRouter bündelt viele Sub-Provider, deren Datenschutz-Klasse aus den Config-Listen kommt (Slug vor dem `/`).
         let privacy_class = if cfg.privacy.local.iter().any(|s| s == &slug) {
             PrivacyClass::Local
         } else if cfg.privacy.zdr.iter().any(|s| s == &slug) {

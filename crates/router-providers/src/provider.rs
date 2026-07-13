@@ -1,7 +1,4 @@
-//! Gemeinsame Abstraktion über alle Egress-Backends. Jede konfigurierte
-//! Backend-Instanz (OpenAI, Groq, Anthropic, oMLX, OpenRouter …) implementiert
-//! diesen Trait; die Registry hält sie als `Arc<dyn Provider>` und dispatcht
-//! über die Backend-ID.
+//! Gemeinsame Abstraktion über alle Egress-Backends. Jede konfigurierte Backend-Instanz (OpenAI, Groq, Anthropic, oMLX, OpenRouter …) implementiert diesen Trait; die Registry hält sie als `Arc<dyn Provider>` und dispatcht über die Backend-ID.
 
 use std::pin::Pin;
 
@@ -33,8 +30,7 @@ pub trait Provider: Send + Sync {
     fn is_local(&self) -> bool;
     /// Katalog dieses Backends. `cfg` liefert Overrides/Heuristik-Regeln.
     async fn list_models(&self, cfg: &RegistryConfig) -> Result<Vec<ModelCandidate>, ProviderError>;
-    /// Öffnet den Chat-Completions-SSE-Stream für ein Modell. `body` ist ein
-    /// OpenAI-Chat-Completions-Request; Nicht-OpenAI-Backends übersetzen intern.
+    /// Öffnet den Chat-Completions-SSE-Stream für ein Modell. `body` ist ein OpenAI-Chat-Completions-Request; Nicht-OpenAI-Backends übersetzen intern.
     async fn chat_completion_stream(
         &self,
         model_id: &str,
@@ -43,8 +39,7 @@ pub trait Provider: Send + Sync {
     ) -> Result<ByteStream, ProviderError>;
 }
 
-/// Löst das Auth-Secret einer Backend-Instanz auf. `None` bei `AuthConfig::None`;
-/// `Err`, wenn eine env-Variable erwartet, aber nicht gesetzt ist.
+/// Löst das Auth-Secret einer Backend-Instanz auf. `None` bei `AuthConfig::None`; `Err`, wenn eine env-Variable erwartet, aber nicht gesetzt ist.
 pub fn resolve_secret(auth: &AuthConfig) -> Result<Option<String>, ProviderError> {
     match auth {
         AuthConfig::None => Ok(None),

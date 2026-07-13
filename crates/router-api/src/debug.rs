@@ -12,8 +12,7 @@ use crate::openai::openai_to_norm;
 use crate::routing::{decide_for, headers_to_hints, parse_privacy_tag, resolve_auto_alias};
 use crate::state::AppState;
 
-/// `GET /v1/transactions` — aktuelle Session-Summe + letzte Aufrufe fürs Widget.
-/// Optional `?limit=N` (default 10).
+/// `GET /v1/transactions` — aktuelle Session-Summe + letzte Aufrufe fürs Widget, optional `?limit=N` (default 10).
 pub async fn transactions(
     State(state): State<AppState>,
     axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
@@ -23,16 +22,7 @@ pub async fn transactions(
     Json(serde_json::to_value(snap).unwrap_or_else(|_| serde_json::json!({})))
 }
 
-/// `GET /v1/intelligence` — Bewertungs-Übersicht pro Router-Modell.
-///
-/// Mergt den aktuellen Modell-Katalog mit den Artificial-Analysis-Scores und
-/// liefert eine sortierte Liste samt Status pro Modell. Optionale Query-Parameter:
-///
-///   - `sort=intelligence|cost|tps|ttft|none`  (default `intelligence`)
-///   - `min_intelligence=NN`                  (Filter, z. B. 50)
-///   - `backend=openrouter|omlx|…`           (Filter, case-insensitiv)
-///   - `limit=N`                              (Default 100)
-///   - `unrated=true|false`                   (Default false → Modelle ohne AA-Score ausblenden)
+/// `GET /v1/intelligence` — Bewertungs-Übersicht pro Router-Modell, mergt Katalog mit Artificial-Analysis-Scores; Query: `sort`, `min_intelligence`, `backend`, `limit`, `unrated`.
 pub async fn intelligence(
     State(state): State<AppState>,
     axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
@@ -161,12 +151,7 @@ pub async fn registry(State(state): State<AppState>) -> Result<Json<Value>, ApiE
     Ok(Json(json!({ "total": models.len(), "models": models })))
 }
 
-/// `POST /v1/explain` — Dry-Run des Expertensystems ohne Egress.
-///
-/// Erwartet denselben Body wie `/v1/chat/completions` oder `/v1/messages`.
-/// Format-Erkennung: Bodies mit Top-Level-Feld `system` (string) oder
-/// `thinking` (object) werden als Anthropic-Format geparst, sonst als
-/// OpenAI. Override via `?format=anthropic|openai`.
+/// `POST /v1/explain` — Dry-Run des Expertensystems ohne Egress; Body wie `/v1/chat/completions` oder `/v1/messages`, Format wird an `system`/`thinking` erkannt oder via `?format=anthropic|openai` erzwungen.
 pub async fn explain(
     State(state): State<AppState>,
     headers: HeaderMap,

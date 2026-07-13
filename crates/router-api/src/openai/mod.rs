@@ -25,10 +25,7 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Json<Value>, A
         .enriched_snapshot()
         .await
         .map_err(|e| ApiError::Upstream(e.to_string()))?;
-    // Synthetic auto-routing models first, so GUI clients can pick auto-routing
-    // (and a profile) from the model dropdown. `auto` uses the header/body
-    // profile; `<profile>/auto` forces that profile. Resolved in
-    // `routing::resolve_auto_alias`.
+    // Synthetic auto-routing models first, so GUI clients can pick auto-routing (and a profile) from the model dropdown; resolved in `routing::resolve_auto_alias`.
     let mut data: Vec<Value> = Vec::with_capacity(snap.models.len() + state.config.profiles.len() + 1);
     data.push(auto_model("auto", "auto-routing · default/active profile"));
     for name in state.config.profiles.keys() {
@@ -36,8 +33,7 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Json<Value>, A
     }
 
     data.extend(snap.models.iter().map(|m| {
-        // OpenRouter-IDs tragen den echten Anbieter im Slug (z. B. "anthropic");
-        // für alle anderen Backends ist die Backend-Instanz der Eigentümer.
+        // OpenRouter-IDs tragen den echten Anbieter im Slug (z. B. "anthropic"), sonst ist die Backend-Instanz der Eigentümer.
         let owned_by = if m.backend_id == "openrouter" {
             m.provider_slug.clone()
         } else {
@@ -213,15 +209,12 @@ where
             cost_usd: cost,
             tokens_out,
         });
-        // SSE-Comment (`: ...`) statt eines `data:`-Events: trägt keine Nutzlast,
-        // die ein Client als JSON fehlinterpretieren könnte. `data: [DONE]` kam
-        // bereits vom Upstream (OpenRouter/oMLX).
+        // SSE-Comment (`: ...`) statt `data:`-Event, damit kein Client es als JSON fehlinterpretiert — `data: [DONE]` kam schon vom Upstream.
         Ok(Event::default().comment("done"))
     }))
 }
 
-/// Sucht in einem JSON-Fragment (SSE-Datablock oder aggregiertem Body) nach
-/// `usage.cost` — OpenRouter liefert das Feld in USD.
+/// Sucht in einem JSON-Fragment (SSE-Datablock oder aggregiertem Body) nach `usage.cost` — OpenRouter liefert das Feld in USD.
 fn extract_cost(data: &str) -> Option<f64> {
     if data == "[DONE]" { return None; }
     let v: serde_json::Value = serde_json::from_str(data).ok()?;
@@ -247,8 +240,7 @@ where
     Ok(out)
 }
 
-/// Ein zusammengebauter Tool-Call aus den `delta.tool_calls`-Fragmenten eines
-/// OpenAI-SSE-Streams. `arguments` wird über mehrere Chunks konkateniert.
+/// Ein zusammengebauter Tool-Call aus den `delta.tool_calls`-Fragmenten eines OpenAI-SSE-Streams; `arguments` wird über mehrere Chunks konkateniert.
 #[derive(Default, Clone)]
 pub(crate) struct ToolAccum {
     pub id: String,
@@ -267,10 +259,7 @@ pub(crate) struct Accumulated {
     pub cost: Option<f64>,
 }
 
-/// Läuft über einen kompletten OpenAI-SSE-Body und baut Text, Tool-Calls,
-/// finish_reason und Usage zusammen. CRLF- und LF-Separatoren werden beide
-/// erkannt. Fragmente, die keine `delta` liefern (z. B. reine Usage-Events),
-/// tragen trotzdem ihre Usage/Cost bei.
+/// Läuft über einen kompletten OpenAI-SSE-Body und baut Text, Tool-Calls, finish_reason und Usage zusammen (CRLF/LF, auch reine Usage-Events ohne `delta`).
 pub(crate) fn accumulate_completion(raw: &[u8]) -> Accumulated {
     let mut acc = Accumulated::default();
     let Ok(text) = std::str::from_utf8(raw) else { return acc };
@@ -291,9 +280,7 @@ pub(crate) fn accumulate_completion(raw: &[u8]) -> Accumulated {
             if let Some(c) = u.get("cost").and_then(|x| x.as_f64()) { acc.cost = Some(c); }
         }
         let Some(choice) = v["choices"].get(0) else { continue };
-        // OpenRouter/oMLX streamen immer (stream=true erzwungen), also `delta`;
-        // ein `message`-Feld fangen wir als Fallback ab, falls ein Upstream
-        // doch einen Vollblock schickt.
+        // OpenRouter/oMLX streamen immer (stream=true erzwungen), also `delta`; `message` fangen wir als Fallback ab, falls ein Upstream doch einen Vollblock schickt.
         let node = choice.get("delta").or_else(|| choice.get("message"));
         if let Some(node) = node {
             if let Some(s) = node.get("content").and_then(|c| c.as_str()) {
@@ -325,9 +312,7 @@ pub(crate) fn accumulate_completion(raw: &[u8]) -> Accumulated {
     acc
 }
 
-/// Aggregiert einen abgesammelten SSE-Stream zu einem klassischen
-/// OpenAI-Chat-Completion-Non-Stream-Body (für Clients, die `stream=false`
-/// geschickt haben).
+/// Aggregiert einen abgesammelten SSE-Stream zu einem klassischen OpenAI-Chat-Completion-Non-Stream-Body (für Clients mit `stream=false`).
 fn aggregate_openai_sse(acc: &Accumulated, model_id: &str) -> Value {
     let mut message = json!({ "role": "assistant" });
     let obj = message.as_object_mut().unwrap();

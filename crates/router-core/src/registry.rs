@@ -120,11 +120,9 @@ impl FromStr for PrivacyClass {
 
 #[derive(Debug, Clone)]
 pub struct ModelCandidate {
-    /// Name der Backend-Instanz aus der Config (z. B. "openai", "groq",
-    /// "anthropic", "omlx", "openrouter"). Schlüssel für Dispatch + Metrics.
+    /// Name der Backend-Instanz aus der Config (z. B. "openai", "groq", "anthropic", "omlx", "openrouter"), Schlüssel für Dispatch + Metrics.
     pub backend_id: String,
-    /// Deterministischer Tiebreak bei Score-Gleichstand: niedriger gewinnt.
-    /// Lokale Backends bekommen 0, damit sie bei Gleichstand bevorzugt werden.
+    /// Deterministischer Tiebreak bei Score-Gleichstand (niedriger gewinnt); lokale Backends bekommen 0, um bevorzugt zu werden.
     pub tiebreak_priority: u8,
     /// Backend-spezifischer Modell-Identifier.
     pub id: String,
@@ -146,8 +144,7 @@ pub struct ModelCandidate {
     pub intelligence_index: Option<f64>,
 }
 
-/// Snapshot der gemergten Registry. In der Lauf-Instanz via
-/// `router-providers::RegistryHandle` geliefert.
+/// Snapshot der gemergten Registry, in der Lauf-Instanz via `router-providers::RegistryHandle` geliefert.
 #[derive(Debug, Clone, Default)]
 pub struct Registry {
     pub models: Vec<ModelCandidate>,

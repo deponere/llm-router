@@ -18,8 +18,7 @@ fn main() -> Result<()> {
     }
 }
 
-/// Load + validate against the real router schema, then emit as JSON so the
-/// Swift side never has to understand TOML.
+/// Load + validate against the real router schema, then emit as JSON so Swift never has to understand TOML.
 fn dump(path: &str) -> Result<()> {
     let cfg = router_config::Config::load(path)
         .with_context(|| format!("loading config from {path}"))?;
@@ -28,8 +27,7 @@ fn dump(path: &str) -> Result<()> {
     Ok(())
 }
 
-/// Read the desired config as JSON on stdin, merge it into the existing TOML
-/// document in place (comments + ordering survive), and write it back.
+/// Read the desired config as JSON on stdin, merge into the existing TOML document in place (comments + ordering survive), and write it back.
 fn apply(path: &str) -> Result<()> {
     let mut stdin = String::new();
     std::io::stdin().read_to_string(&mut stdin)?;
@@ -46,15 +44,13 @@ fn apply(path: &str) -> Result<()> {
 
     merge_table(doc.as_table_mut(), obj);
 
-    // Backup before overwriting — struct-based tools should never eat a config
-    // without a way back.
+    // Backup before overwriting — never eat a config without a way back.
     std::fs::write(format!("{path}.bak"), &existing)?;
     std::fs::write(path, doc.to_string())?;
     Ok(())
 }
 
-/// Recursively merge a JSON object into a toml_edit table. Unchanged subtrees
-/// (and their comments) are left untouched; only differing leaves are rewritten.
+/// Recursively merge a JSON object into a toml_edit table; unchanged subtrees (and their comments) are left untouched, only differing leaves rewritten.
 fn merge_table(dst: &mut Table, src: &serde_json::Map<String, J>) {
     // Drop keys the incoming config no longer has (e.g. a removed backend).
     let stale: Vec<String> = dst
@@ -75,9 +71,7 @@ fn merge_table(dst: &mut Table, src: &serde_json::Map<String, J>) {
             J::Array(a) if a.is_empty() => {
                 dst.remove(k);
             }
-            // Array of objects -> [[table]] blocks. Merge element-wise into an
-            // existing array so its header decor (the comments above the first
-            // [[table]]) survives; only rebuild if it wasn't one before.
+            // Array of objects -> [[table]] blocks; merge element-wise into an existing array so its header decor survives, only rebuild if it wasn't one before.
             J::Array(a) if a.iter().all(J::is_object) => match dst.get_mut(k) {
                 Some(Item::ArrayOfTables(aot)) => merge_aot(aot, a),
                 _ => {
@@ -117,9 +111,7 @@ fn merge_inline(dst: &mut InlineTable, src: &serde_json::Map<String, J>) {
     }
 }
 
-/// Replace a scalar/array leaf while preserving the key's inline decor (trailing
-/// comments). Keeps float typing when the original was a float but the JSON
-/// round-trip demoted it to an integer (e.g. weight 1.0 -> 1).
+/// Replace a scalar/array leaf while preserving the key's inline decor; keeps float typing when the JSON round-trip demoted a float to an integer (e.g. weight 1.0 -> 1).
 fn set_scalar(dst: &mut Table, k: &str, v: &J) {
     let mut nv = json_to_value(v);
     if let Some(Item::Value(existing)) = dst.get_mut(k) {
@@ -142,8 +134,7 @@ fn new_table_item(o: &serde_json::Map<String, J>) -> Item {
     Item::Table(t)
 }
 
-/// Merge into an existing array-of-tables in place: recurse into overlapping
-/// entries (keeping their decor), append new ones, drop trailing removed ones.
+/// Merge into an existing array-of-tables in place: recurse into overlapping entries (keeping decor), append new ones, drop trailing removed ones.
 fn merge_aot(aot: &mut ArrayOfTables, src: &[J]) {
     while aot.len() > src.len() {
         aot.remove(aot.len() - 1);

@@ -1,6 +1,4 @@
-//! Gemergter Modell-Katalog. Fetcht von allen konfigurierten Backends, legt
-//! das Ergebnis in einen `moka`-TTL-Cache und reicht es als Snapshot
-//! (`Registry`) raus.
+//! Gemergter Modell-Katalog. Fetcht von allen konfigurierten Backends, legt das Ergebnis in einen `moka`-TTL-Cache und reicht es als Snapshot (`Registry`) raus.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -102,8 +100,7 @@ impl RegistryHandle {
         out
     }
 
-    /// Versorgt einen Snapshot mit Artificial-Analysis-Scores. Bei Fehler oder
-    /// disabled bleibt das Feld `intelligence_index` einfach `None`.
+    /// Versorgt einen Snapshot mit Artificial-Analysis-Scores. Bei Fehler oder disabled bleibt das Feld `intelligence_index` einfach `None`.
     pub async fn enriched_snapshot(&self) -> Result<Arc<Registry>, RegistryError> {
         let snap = self.snapshot().await?;
         if !self.aa.enabled() {
@@ -126,8 +123,7 @@ impl RegistryHandle {
     }
 }
 
-/// Baut die passende Provider-Impl für eine Backend-Instanz. Gibt `None`, wenn
-/// der Kind (noch) nicht unterstützt wird.
+/// Baut die passende Provider-Impl für eine Backend-Instanz. Gibt `None`, wenn der Kind (noch) nicht unterstützt wird.
 fn build_provider(id: &str, cfg: &BackendConfig) -> Option<Arc<dyn Provider>> {
     match cfg.kind {
         BackendKind::OpenaiCompat => Some(Arc::new(OpenAiCompatClient::new(id, cfg))),

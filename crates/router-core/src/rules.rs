@@ -1,6 +1,4 @@
-//! Hard-Filter. Reihenfolge ist festgeschrieben, jeder Grund wird als
-//! [`FilterReason`] zurückgegeben — der Entscheidungs-Trace listet später alle
-//! verworfenen Kandidaten mit Grund.
+//! Hard-Filter mit festgeschriebener Reihenfolge; jeder Grund wird als [`FilterReason`] zurückgegeben, der Entscheidungs-Trace listet später alle verworfenen Kandidaten mit Grund.
 
 use crate::norm::{NormRequest, PrivacyTag};
 use crate::profile::ResolvedProfile;
@@ -34,16 +32,14 @@ pub fn passes_all(
     profile: &ResolvedProfile,
     cand: &ModelCandidate,
 ) -> Result<(), FilterReason> {
-    // 1. Model-Hint: Wenn der Client explizit ein Modell nennt (und nicht "auto"),
-    //    zwingen wir exakt darauf. So bleibt manuelles Override per Body möglich.
+    // 1. Model-Hint: nennt der Client explizit ein Modell (nicht "auto"), zwingen wir exakt darauf — manuelles Override per Body bleibt möglich.
     if let Some(hint) = req.model_hint.as_deref() {
         if !hint.is_empty() && hint != "auto" && hint != cand.id {
             return Err(FilterReason::ModelHintMismatch);
         }
     }
 
-    // 2. Privacy-Tag aus dem Request überschreibt Profil-Einstellungen nach unten:
-    //    `LocalOnly` -> nur Backend::OMlx; `Zdr` -> Local oder Zdr.
+    // 2. Privacy-Tag aus dem Request überschreibt Profil-Einstellungen nach unten: `LocalOnly` -> nur Backend::OMlx; `Zdr` -> Local oder Zdr.
     match req.privacy_tag {
         PrivacyTag::LocalOnly => {
             if cand.privacy_class != PrivacyClass::Local {
@@ -137,8 +133,7 @@ pub fn passes_all(
         }
     }
 
-    // 12. Intelligence-Filter: erforderlicher Mindest-Index aus AA. Modelle
-    //     ohne Bewertung werden verworfen, wenn der Filter aktiv ist.
+    // 12. Intelligence-Filter: erforderlicher Mindest-Index aus AA; unbewertete Modelle werden verworfen, wenn aktiv.
     if let Some(cap) = profile.min_intelligence_index {
         match cand.intelligence_index {
             Some(v) if v >= cap => {}

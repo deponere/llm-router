@@ -1,5 +1,4 @@
-//! Orchestriert Hard-Filter + Scoring und liefert eine [`Decision`] mit
-//! nachvollziehbarem Trace zurück.
+//! Orchestriert Hard-Filter + Scoring und liefert eine [`Decision`] mit nachvollziehbarem Trace zurück.
 
 use serde::Serialize;
 
@@ -42,8 +41,7 @@ pub struct DecisionTrace {
 #[derive(Debug, Clone)]
 pub struct Decision {
     pub winner: ModelCandidate,
-    /// Alle anderen ranked Kandidaten in absteigendem Score, ohne den Winner.
-    /// Wird vom Egress als Fallback-Cascade durchprobiert.
+    /// Alle anderen ranked Kandidaten in absteigendem Score (ohne Winner), vom Egress als Fallback-Cascade durchprobiert.
     pub alternatives: Vec<ModelCandidate>,
     pub trace: DecisionTrace,
 }

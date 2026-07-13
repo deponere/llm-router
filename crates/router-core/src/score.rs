@@ -1,13 +1,10 @@
-//! Scoring-Funktion. Gibt für jeden überlebenden Kandidaten einen Score in
-//! [0, 1] zurück. Tiebreak ist rein deterministisch:
-//! `(score desc, backend_priority asc, model_id asc)`.
+//! Scoring-Funktion: liefert für jeden überlebenden Kandidaten einen Score in [0, 1], Tiebreak deterministisch: `(score desc, backend_priority asc, model_id asc)`.
 
 use crate::norm::NormRequest;
 use crate::profile::ResolvedProfile;
 use crate::registry::ModelCandidate;
 
-/// Bei keiner Messung nehmen wir diesen Wert als neutralen Platzhalter,
-/// damit das Latenz-Gewicht nicht komplett Null wird.
+/// Bei keiner Messung nehmen wir diesen Wert als neutralen Platzhalter, damit das Latenz-Gewicht nicht komplett Null wird.
 const LATENCY_UNKNOWN_MS: u32 = 2_500;
 /// Latenz-Normalisierungs-Horizont: alles >5s scored 0.
 const LATENCY_NORM_MS: f64 = 5_000.0;
@@ -57,9 +54,7 @@ pub fn score_candidate(
 
     let preference_score = preference_rank(&profile.preferences, &cand.id);
 
-    // Quality kommt aus dem Artificial-Analysis-Intelligence-Index (0..100).
-    // Modelle ohne Bewertung erhalten 0 — niedriger als jedes bewertete Modell,
-    // aber kein Hard-Filter (dafür ist `min_intelligence_index` da).
+    // Quality kommt aus dem Artificial-Analysis-Intelligence-Index (0..100); unbewertete Modelle erhalten 0, aber kein Hard-Filter (dafür `min_intelligence_index`).
     let quality_score = clamp01(cand.intelligence_index.unwrap_or(0.0) / 100.0);
 
     let w = profile.weights;
@@ -84,8 +79,7 @@ pub fn score_candidate(
     }
 }
 
-/// Höherer Rang = besser. Modelle früher in der Liste erhalten linear höheren
-/// Score; nicht gelistete Modelle erhalten 0.
+/// Höherer Rang = besser: Modelle früher in der Liste erhalten linear höheren Score, nicht gelistete Modelle erhalten 0.
 fn preference_rank(prefs: &[String], id: &str) -> f64 {
     if prefs.is_empty() {
         return 0.0;

@@ -1,7 +1,6 @@
 import SwiftUI
 
-// Convenience bindings into the optional config tree. All force-unwrap `config`,
-// which is safe because the editor views only render when config != nil.
+// Convenience bindings into the optional config tree. All force-unwrap `config`, safe because editor views only render when config != nil.
 extension AppState {
     func backend(_ key: String) -> Binding<Backend> {
         Binding(get: { self.config!.backends[key]! },

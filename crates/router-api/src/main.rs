@@ -1,5 +1,4 @@
-//! Router-API-Binary: Axum-Server mit OpenAI- und Anthropic-kompatiblen
-//! Endpunkten.
+//! Router-API-Binary: Axum-Server mit OpenAI- und Anthropic-kompatiblen Endpunkten.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -12,8 +11,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // .env gewinnt gegenueber Shell-Env — so bleibt die Router-Config
-    // selbsterklaerend und unabhaengig von globalen zshrc-Variablen.
+    // .env gewinnt gegenueber Shell-Env — so bleibt die Router-Config selbsterklaerend und unabhaengig von globalen zshrc-Variablen.
     let _ = dotenvy::dotenv_override();
     init_tracing();
 

@@ -23,8 +23,7 @@ impl IntoResponse for ApiError {
             ApiError::Upstream(_) => (StatusCode::BAD_GATEWAY, "upstream_error"),
             ApiError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal"),
         };
-        // Bei 4xx/5xx die Ursache auch auf stderr loggen — sonst sieht man nur
-        // tower_http "response failed classification=...", aber nicht, warum.
+        // Bei 4xx/5xx die Ursache auch auf stderr loggen — sonst sieht man nur "response failed classification=...", aber nicht warum.
         let msg = self.to_string();
         const RED: &str = "\x1b[31m";
         const DIM: &str = "\x1b[2m";

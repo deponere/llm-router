@@ -1,6 +1,4 @@
-//! Egress zu konkreten LLM-Backends und Modell-Katalog-Aggregation. Jede
-//! Backend-Instanz implementiert [`provider::Provider`]; die [`registry`] hält
-//! sie als `Arc<dyn Provider>` und dispatcht über die Backend-ID.
+//! Egress zu konkreten LLM-Backends und Modell-Katalog-Aggregation. Jede Backend-Instanz implementiert [`provider::Provider`]; die [`registry`] hält sie als `Arc<dyn Provider>` und dispatcht über die Backend-ID.
 
 pub mod anthropic;
 pub mod artificial_analysis;

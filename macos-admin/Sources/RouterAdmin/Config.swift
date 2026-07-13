@@ -1,10 +1,6 @@
 import Foundation
 
-// Mirrors router-config's Config schema 1:1. Property names are snake_case on
-// purpose: they match the JSON keys emitted by `router-admin dump`, so no
-// CodingKeys and no key strategy are needed — and, crucially, the automatic
-// .convertToSnakeCase strategy would mangle dictionary keys like the AA aliases
-// ("Qwen3.6-35B-A3B-bf16"). Structs are value types; SwiftUI edits them in place.
+// Mirrors router-config's Config schema 1:1; snake_case properties match router-admin dump's JSON keys directly (no CodingKeys/key strategy), avoiding .convertToSnakeCase mangling dict keys like the AA aliases ("Qwen3.6-35B-A3B-bf16"). Structs are value types; SwiftUI edits them in place.
 
 struct RouterConfig: Codable {
     var server: Server

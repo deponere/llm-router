@@ -1,8 +1,6 @@
 import Foundation
 
-// Headless end-to-end check of the Swift<->Rust config bridge:
-// dump -> decode -> mutate -> encode -> apply -> dump -> verify.
-// Run with: RouterAdmin --selftest <router-admin-binary> <router.toml>
+// Headless end-to-end check of the Swift<->Rust config bridge (dump -> decode -> mutate -> encode -> apply -> dump -> verify). Run: RouterAdmin --selftest <router-admin-binary> <router.toml>
 enum SelfTest {
     static func run() {
         let args = CommandLine.arguments
