@@ -21,6 +21,22 @@ pub fn decide_for(
     Ok((profile, decision))
 }
 
+/// Resolves the synthetic auto-routing models that `/v1/models` advertises:
+/// `auto` routes with the header/body profile, and `<profile>/auto` routes with
+/// that profile. This lets GUI clients (Msty etc.) pick auto-routing — and a
+/// profile — from the model dropdown instead of setting a header. Rewrites
+/// `model_hint` back to plain `"auto"` so the hard filter doesn't try to pin it.
+pub fn resolve_auto_alias(norm: &mut NormRequest, cfg: &router_config::Config) {
+    let Some(hint) = norm.model_hint.as_deref() else { return };
+    if let Some(prof) = hint.strip_suffix("/auto") {
+        if cfg.profiles.contains_key(prof) {
+            // Model choice is the deliberate GUI selection — it wins over a header.
+            norm.profile_hint = Some(prof.to_string());
+            norm.model_hint = Some("auto".into());
+        }
+    }
+}
+
 /// Extrahiert `x-route-profile` / `x-route-privacy` Header.
 pub fn headers_to_hints(headers: &axum::http::HeaderMap) -> (Option<String>, Option<String>) {
     let prof = headers
@@ -187,4 +203,52 @@ fn chrono_like_hhmmss() -> String {
     let m = (secs / 60) % 60;
     let s = secs % 60;
     format!("{h:02}:{m:02}:{s:02}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cfg() -> router_config::Config {
+        r#"
+        [server]
+        bind = "127.0.0.1:4000"
+        [backends.omlx]
+        kind = "openai_compat"
+        base_url = "http://127.0.0.1:8000/v1"
+        [profiles.local]
+        [profiles.cheap]
+        "#
+        .parse()
+        .unwrap()
+    }
+
+    fn norm(model: &str) -> NormRequest {
+        NormRequest { model_hint: Some(model.into()), ..Default::default() }
+    }
+
+    #[test]
+    fn profile_suffix_selects_profile_and_routes() {
+        let mut n = norm("local/auto");
+        resolve_auto_alias(&mut n, &cfg());
+        assert_eq!(n.model_hint.as_deref(), Some("auto"));
+        assert_eq!(n.profile_hint.as_deref(), Some("local"));
+    }
+
+    #[test]
+    fn plain_auto_is_left_alone() {
+        let mut n = norm("auto");
+        resolve_auto_alias(&mut n, &cfg());
+        assert_eq!(n.model_hint.as_deref(), Some("auto"));
+        assert_eq!(n.profile_hint, None);
+    }
+
+    #[test]
+    fn unknown_profile_suffix_is_not_treated_as_auto() {
+        // A real model that happens to end in /auto must still be pinned.
+        let mut n = norm("vendor/auto");
+        resolve_auto_alias(&mut n, &cfg());
+        assert_eq!(n.model_hint.as_deref(), Some("vendor/auto"));
+        assert_eq!(n.profile_hint, None);
+    }
 }

@@ -18,7 +18,7 @@ use serde_json::{json, Value};
 use crate::error::ApiError;
 use crate::history::now_unix;
 use crate::openai::{accumulate_completion, collect_stream, Accumulated};
-use crate::routing::{announce_completion, announce_decision, decide_for, headers_to_hints, parse_privacy_tag, stream_with_fallback};
+use crate::routing::{announce_completion, announce_decision, decide_for, headers_to_hints, parse_privacy_tag, resolve_auto_alias, stream_with_fallback};
 use crate::sse::{find_event_boundary, parse_sse_data};
 use crate::state::AppState;
 
@@ -36,6 +36,7 @@ pub async fn messages(
         norm.privacy_tag = parse_privacy_tag(privacy_hdr.as_deref());
     }
     norm.detect_required();
+    resolve_auto_alias(&mut norm, &state.config);
 
     let snap = state
         .registry

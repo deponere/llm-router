@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 
 use crate::error::ApiError;
 use crate::history::now_unix;
-use crate::routing::{announce_completion, announce_decision, decide_for, headers_to_hints, parse_privacy_tag, stream_with_fallback};
+use crate::routing::{announce_completion, announce_decision, decide_for, headers_to_hints, parse_privacy_tag, resolve_auto_alias, stream_with_fallback};
 use crate::sse::{find_event_boundary, parse_sse_data};
 use crate::state::AppState;
 
@@ -25,32 +25,38 @@ pub async fn list_models(State(state): State<AppState>) -> Result<Json<Value>, A
         .enriched_snapshot()
         .await
         .map_err(|e| ApiError::Upstream(e.to_string()))?;
-    let data: Vec<Value> = snap
-        .models
-        .iter()
-        .map(|m| {
-            // OpenRouter-IDs tragen den echten Anbieter im Slug (z. B. "anthropic");
-            // für alle anderen Backends ist die Backend-Instanz der Eigentümer.
-            let owned_by = if m.backend_id == "openrouter" {
-                m.provider_slug.clone()
-            } else {
-                m.backend_id.clone()
-            };
-            json!({
-                "id": m.id,
-                "object": "model",
-                "created": 0,
-                "owned_by": owned_by,
-                "context_length": m.context_length,
-                "pricing": {
-                    "prompt_per_mtok": m.price_in_per_mtok,
-                    "completion_per_mtok": m.price_out_per_mtok,
-                },
-                "privacy_class": format!("{:?}", m.privacy_class),
-                "backend": m.backend_id,
-            })
+    // Synthetic auto-routing models first, so GUI clients can pick auto-routing
+    // (and a profile) from the model dropdown. `auto` uses the header/body
+    // profile; `<profile>/auto` forces that profile. Resolved in
+    // `routing::resolve_auto_alias`.
+    let mut data: Vec<Value> = Vec::with_capacity(snap.models.len() + state.config.profiles.len() + 1);
+    data.push(auto_model("auto", "auto-routing · default/active profile"));
+    for name in state.config.profiles.keys() {
+        data.push(auto_model(&format!("{name}/auto"), &format!("auto-routing · '{name}' profile")));
+    }
+
+    data.extend(snap.models.iter().map(|m| {
+        // OpenRouter-IDs tragen den echten Anbieter im Slug (z. B. "anthropic");
+        // für alle anderen Backends ist die Backend-Instanz der Eigentümer.
+        let owned_by = if m.backend_id == "openrouter" {
+            m.provider_slug.clone()
+        } else {
+            m.backend_id.clone()
+        };
+        json!({
+            "id": m.id,
+            "object": "model",
+            "created": 0,
+            "owned_by": owned_by,
+            "context_length": m.context_length,
+            "pricing": {
+                "prompt_per_mtok": m.price_in_per_mtok,
+                "completion_per_mtok": m.price_out_per_mtok,
+            },
+            "privacy_class": format!("{:?}", m.privacy_class),
+            "backend": m.backend_id,
         })
-        .collect();
+    }));
     Ok(Json(json!({ "object": "list", "data": data })))
 }
 
@@ -69,6 +75,7 @@ pub async fn chat_completions(
         norm.privacy_tag = parse_privacy_tag(privacy_hdr.as_deref());
     }
     norm.detect_required();
+    resolve_auto_alias(&mut norm, &state.config);
 
     let snap = state
         .registry
@@ -79,6 +86,18 @@ pub async fn chat_completions(
     announce_decision("openai", &profile, &decision, &norm);
 
     dispatch_openai(state, profile, decision, norm, body).await
+}
+
+/// A synthetic `/v1/models` entry that maps to auto-routing.
+fn auto_model(id: &str, desc: &str) -> Value {
+    json!({
+        "id": id,
+        "object": "model",
+        "created": 0,
+        "owned_by": "router",
+        "description": desc,
+        "backend": "router",
+    })
 }
 
 async fn dispatch_openai(

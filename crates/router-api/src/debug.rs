@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use crate::anthropic::anthropic_to_norm;
 use crate::error::ApiError;
 use crate::openai::openai_to_norm;
-use crate::routing::{decide_for, headers_to_hints, parse_privacy_tag};
+use crate::routing::{decide_for, headers_to_hints, parse_privacy_tag, resolve_auto_alias};
 use crate::state::AppState;
 
 /// `GET /v1/transactions` — aktuelle Session-Summe + letzte Aufrufe fürs Widget.
@@ -192,6 +192,7 @@ pub async fn explain(
         norm.privacy_tag = parse_privacy_tag(privacy_hdr.as_deref());
     }
     norm.detect_required();
+    resolve_auto_alias(&mut norm, &state.config);
 
     let snap = state
         .registry

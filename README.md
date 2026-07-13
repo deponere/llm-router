@@ -95,7 +95,7 @@ curl -sN http://127.0.0.1:4000/v1/chat/completions \
 
 ## Profiles
 
-Select a profile via the `x-route-profile` header or the `route_profile` body field.
+Select a profile via the `x-route-profile` header, the `route_profile` body field, or — for GUI clients that only expose a model dropdown — the synthetic `<profile>/auto` model id (e.g. `cheap/auto`). `/v1/models` advertises one per profile alongside plain `auto`.
 
 | Profile | Intent | Key constraints |
 |---------|--------|-----------------|
