@@ -173,12 +173,9 @@ ttl_seconds = 86400
 # Wildcards: * = beliebige Zeichenfolge, Muster gegen die volle model.id
 
 [profiles.default]
-weights = { cost = 0.30, latency = 0.20, context = 0.15, preference = 0.20, quality = 0.15 }
+weights = { cost = 0.15, latency = 0.10, context = 0.10, preference = 0.55, quality = 0.10 }
 preferences = [
-    "Qwen3.6-35B-A3B-bf16",
-    "gpt-oss-20b-MXFP4-Q8",
-    "gemma-4-26B-A4B-it-MLX-8bit",
-    "gemma-4-e2b-it-4bit",
+    "deepseek/deepseek-v4-pro",
 ]
 # :free-Varianten haben enge Provider-Constraints und scheitern oft an
 # Tool-Parametern. Wenn der Caller `:free` will, ueber `cheap` oder explizit pinnen.
