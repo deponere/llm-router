@@ -73,6 +73,7 @@ pub async fn messages(
             model_id: winner.id.clone(),
             duration_ms: elapsed.as_millis() as u64,
             cost_usd: acc.cost,
+            tokens_out: acc.completion_tokens.unwrap_or(0),
         });
         let body = anthropic_body_from(&acc, &winner.id);
         return Ok(Json(body).into_response());
@@ -85,7 +86,7 @@ pub async fn messages(
     let model_for_event = winner.id.clone();
     let model_for_log = winner.id.clone();
     let backend_id = winner.backend_id.clone();
-    let event_stream = openai_sse_to_anthropic(byte_stream, model_for_event, move |elapsed, cost| {
+    let event_stream = openai_sse_to_anthropic(byte_stream, model_for_event, move |elapsed, cost, tokens_out| {
         tracker.record(&backend_id, &winner.id, elapsed);
         announce_completion("anthropic", &model_for_log, elapsed, cost);
         history.record(crate::history::Transaction {
@@ -96,6 +97,7 @@ pub async fn messages(
             model_id: model_for_log.clone(),
             duration_ms: elapsed.as_millis() as u64,
             cost_usd: cost,
+            tokens_out,
         });
     });
 
@@ -273,7 +275,7 @@ fn openai_sse_to_anthropic<S, F>(
 ) -> impl Stream<Item = Result<Event, std::convert::Infallible>> + Send
 where
     S: Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send + 'static,
-    F: FnOnce(std::time::Duration, Option<f64>) + Send + 'static,
+    F: FnOnce(std::time::Duration, Option<f64>, u64) + Send + 'static,
 {
     use futures::stream::StreamExt;
 
@@ -389,13 +391,13 @@ where
     // Abschluss-Sequenz nach Anthropic-Spec: (content_block_stop) → message_delta → message_stop.
     let closing = futures::stream::once(async move {
         let cost = *cost_cell.lock().unwrap();
-        on_done(started.elapsed(), cost);
+        let output_tokens = out_tokens_cell.lock().unwrap().unwrap_or(0);
+        on_done(started.elapsed(), cost, output_tokens);
         let stop_reason = stop_reason_cell
             .lock()
             .unwrap()
             .clone()
             .unwrap_or_else(|| "end_turn".to_string());
-        let output_tokens = out_tokens_cell.lock().unwrap().unwrap_or(0);
         let block_open = block_open.load(std::sync::atomic::Ordering::SeqCst);
         closing_events(block_open, &stop_reason, output_tokens)
             .into_iter()

@@ -5,10 +5,49 @@ enum RouterStatus {
     case running, stopped, unknown
 }
 
+// MARK: - Transaction snapshot (`GET /v1/transactions`)
+
+struct TxTotals: Codable {
+    let cost_usd: Double
+    let count: Int
+    let tokens_out: Int
+    let tokens_per_sec: Double
+}
+
+struct Txn: Codable, Identifiable {
+    let unix_ts: Int
+    let api: String
+    let profile: String
+    let backend: String
+    let model_id: String
+    let duration_ms: Int
+    let cost_usd: Double?
+    let tokens_out: Int
+
+    var id: String { "\(unix_ts)-\(backend)-\(model_id)-\(duration_ms)" }
+
+    private static let hhmmss: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
+    var timeString: String {
+        Self.hhmmss.string(from: Date(timeIntervalSince1970: TimeInterval(unix_ts)))
+    }
+}
+
+struct TxSnapshot: Codable {
+    let totals_session: TxTotals
+    let totals_today_utc: TxTotals
+    let recent: [Txn]
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var config: RouterConfig?
     @Published var status: RouterStatus = .unknown
+    @Published var snapshot: TxSnapshot?
     @Published var message: String = ""
     @Published var dirty = false
     @Published var rootPath: String {
@@ -115,8 +154,9 @@ final class AppState: ObservableObject {
 
     func refreshStatus() {
         let host = bindAddress.replacingOccurrences(of: "0.0.0.0", with: "127.0.0.1")
-        guard let url = URL(string: "http://\(host)/v1/models") else { return }
-        var req = URLRequest(url: url)
+        guard let statusURL = URL(string: "http://\(host)/v1/models"),
+              let txURL = URL(string: "http://\(host)/v1/transactions?limit=50") else { return }
+        var req = URLRequest(url: statusURL)
         req.timeoutInterval = 1.5
         Task {
             do {
@@ -124,7 +164,16 @@ final class AppState: ObservableObject {
                 let ok = (resp as? HTTPURLResponse)?.statusCode == 200
                 await MainActor.run { self.status = ok ? .running : .stopped }
             } catch {
-                await MainActor.run { self.status = .stopped }
+                await MainActor.run { self.status = .stopped; self.snapshot = nil }
+                return
+            }
+            // Transaktions-Snapshot separat holen; ein Fehler hier lässt den
+            // Health-Status unberührt.
+            var txReq = URLRequest(url: txURL)
+            txReq.timeoutInterval = 1.5
+            if let (data, _) = try? await URLSession.shared.data(for: txReq),
+               let snap = try? JSONDecoder().decode(TxSnapshot.self, from: data) {
+                await MainActor.run { self.snapshot = snap }
             }
         }
     }

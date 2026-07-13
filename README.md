@@ -186,6 +186,14 @@ POST /v1/messages                     Anthropic Messages API (stream or non-stre
 
 Accepts the full Anthropic request format including `thinking`, tool use blocks, and image content. The proxy translates to OpenAI internally and translates the response back before returning.
 
+### Observability
+
+```
+GET  /v1/transactions?limit=N         recent calls + session/today totals
+```
+
+Returns an in-memory ring buffer (last 100 calls) with per-call `duration_ms`, `tokens_out` and `cost_usd`, plus `totals_session` / `totals_today_utc` aggregates carrying `count`, `tokens_out` and `tokens_per_sec` (output tokens ÷ summed call duration). The [admin app](#admin-app-macos)'s **Log** tab renders this.
+
 ---
 
 ## Configuration
@@ -270,6 +278,7 @@ A native SwiftUI menu-bar app in [`macos-admin/`](./macos-admin/) edits the whol
 - **Profiles** — weight sliders (with a live Σ), price/latency caps, all allow/deny lists, provider flags.
 - **Registry** — Intelligence config, privacy slugs, model overrides.
 - **Router** — start / stop / restart, live status dot polling `/v1/models`.
+- **Log** — live usage from `/v1/transactions`: session/today totals (call count, tokens/s, output tokens, cost) plus the last 50 calls with model, backend, profile, duration and tokens. The header also shows a compact `calls · tok/s · tokens · $` line.
 
 Saving writes back through `router-admin` via `toml_edit`, so **comments and key order in `router.toml` survive** (a `.bak` is written first).
 

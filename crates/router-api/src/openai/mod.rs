@@ -130,7 +130,8 @@ async fn dispatch_openai(
         let bytes = collect_stream(byte_stream).await?;
         let elapsed = started.elapsed();
         state.tracker.record(&winner.backend_id, &winner.id, elapsed);
-        let cost = scan_cost_in_sse(&bytes);
+        let acc = accumulate_completion(&bytes);
+        let cost = acc.cost;
         announce_completion("openai", &winner.id, elapsed, cost);
         state.history.record(crate::history::Transaction {
             unix_ts: now_unix(),
@@ -140,9 +141,9 @@ async fn dispatch_openai(
             model_id: winner.id.clone(),
             duration_ms: elapsed.as_millis() as u64,
             cost_usd: cost,
+            tokens_out: acc.completion_tokens.unwrap_or(0),
         });
-        let aggregated = aggregate_openai_sse(&bytes, &winner.id)
-            .map_err(|e| ApiError::Upstream(format!("aggregation failed: {e}")))?;
+        let aggregated = aggregate_openai_sse(&acc, &winner.id);
         Ok(Json(aggregated).into_response())
     }
 }
@@ -161,9 +162,11 @@ where
 {
     use futures::stream::StreamExt;
     let mut buf: Vec<u8> = Vec::new();
-    // Gemeinsame Kosten-Zelle zwischen flat_map und Stream-Ende.
+    // Gemeinsame Kosten-/Token-Zellen zwischen flat_map und Stream-Ende.
     let cost_cell = std::sync::Arc::new(std::sync::Mutex::new(Option::<f64>::None));
     let cost_cell_for_stream = cost_cell.clone();
+    let tokens_cell = std::sync::Arc::new(std::sync::Mutex::new(0u64));
+    let tokens_cell_for_stream = tokens_cell.clone();
     let s = inner.flat_map(move |chunk| {
         let mut events: Vec<Result<Event, std::convert::Infallible>> = Vec::new();
         match chunk {
@@ -177,6 +180,9 @@ where
                     if let Some(data) = parse_sse_data(&event_bytes) {
                         if let Some(c) = extract_cost(&data) {
                             *cost_cell_for_stream.lock().unwrap() = Some(c);
+                        }
+                        if let Some(t) = extract_out_tokens(&data) {
+                            *tokens_cell_for_stream.lock().unwrap() = t;
                         }
                         events.push(Ok(Event::default().data(data)));
                     }
@@ -195,6 +201,7 @@ where
         let elapsed = started.elapsed();
         tracker.record(&backend_id, &model_id, elapsed);
         let cost = *cost_cell.lock().unwrap();
+        let tokens_out = *tokens_cell.lock().unwrap();
         crate::routing::announce_completion("openai", &model_id, elapsed, cost);
         history.record(crate::history::Transaction {
             unix_ts: now_unix(),
@@ -204,6 +211,7 @@ where
             model_id: model_id.clone(),
             duration_ms: elapsed.as_millis() as u64,
             cost_usd: cost,
+            tokens_out,
         });
         // SSE-Comment (`: ...`) statt eines `data:`-Events: trägt keine Nutzlast,
         // die ein Client als JSON fehlinterpretieren könnte. `data: [DONE]` kam
@@ -220,24 +228,11 @@ fn extract_cost(data: &str) -> Option<f64> {
     v.get("usage")?.get("cost")?.as_f64()
 }
 
-/// Laeuft ueber einen kompletten SSE-Response (Non-Stream-Pfad) und gibt
-/// die zuletzt gesehenen Kosten zurueck. OpenRouter schickt den usage-Block
-/// meist im vorletzten Event, direkt vor `data: [DONE]`.
-fn scan_cost_in_sse(raw: &[u8]) -> Option<f64> {
-    let text = std::str::from_utf8(raw).ok()?;
-    let mut last: Option<f64> = None;
-    for block in text.split("\n\n") {
-        let data = block
-            .lines()
-            .filter_map(|l| l.strip_prefix("data: ").or_else(|| l.strip_prefix("data:")))
-            .collect::<Vec<_>>()
-            .join("\n");
-        if data.trim().is_empty() { continue; }
-        if let Some(c) = extract_cost(&data) {
-            last = Some(c);
-        }
-    }
-    last
+/// Liest `usage.completion_tokens` aus einem SSE-Datablock (finaler Usage-Event).
+fn extract_out_tokens(data: &str) -> Option<u64> {
+    if data == "[DONE]" { return None; }
+    let v: serde_json::Value = serde_json::from_str(data).ok()?;
+    v.get("usage")?.get("completion_tokens")?.as_u64()
 }
 
 pub(crate) async fn collect_stream<S>(mut stream: S) -> Result<Vec<u8>, ApiError>
@@ -333,9 +328,7 @@ pub(crate) fn accumulate_completion(raw: &[u8]) -> Accumulated {
 /// Aggregiert einen abgesammelten SSE-Stream zu einem klassischen
 /// OpenAI-Chat-Completion-Non-Stream-Body (für Clients, die `stream=false`
 /// geschickt haben).
-fn aggregate_openai_sse(raw: &[u8], model_id: &str) -> Result<Value, String> {
-    let acc = accumulate_completion(raw);
-
+fn aggregate_openai_sse(acc: &Accumulated, model_id: &str) -> Value {
     let mut message = json!({ "role": "assistant" });
     let obj = message.as_object_mut().unwrap();
     if acc.tool_calls.is_empty() {
@@ -365,7 +358,7 @@ fn aggregate_openai_sse(raw: &[u8], model_id: &str) -> Result<Value, String> {
         if acc.tool_calls.is_empty() { "stop".to_string() } else { "tool_calls".to_string() }
     });
 
-    Ok(json!({
+    json!({
         "id": format!("chatcmpl-{}", uuid::Uuid::new_v4().simple()),
         "object": "chat.completion",
         "created": now_unix() as i64,
@@ -380,7 +373,7 @@ fn aggregate_openai_sse(raw: &[u8], model_id: &str) -> Result<Value, String> {
             "completion_tokens": acc.completion_tokens.unwrap_or(0),
             "total_tokens": acc.prompt_tokens.unwrap_or(0) + acc.completion_tokens.unwrap_or(0),
         },
-    }))
+    })
 }
 
 /// Übersetzt OpenAI-Chat-Completions-Body -> internes NormRequest.
@@ -537,7 +530,7 @@ mod tests {
     fn aggregate_openai_puts_tool_calls_in_message() {
         let raw = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_9\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n\
                    data: [DONE]\n\n";
-        let v = aggregate_openai_sse(raw.as_bytes(), "m/x").unwrap();
+        let v = aggregate_openai_sse(&accumulate_completion(raw.as_bytes()), "m/x");
         let msg = &v["choices"][0]["message"];
         assert!(msg["content"].is_null());
         assert_eq!(msg["tool_calls"][0]["function"]["name"], "f");

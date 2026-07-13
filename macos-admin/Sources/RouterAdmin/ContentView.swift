@@ -19,6 +19,7 @@ struct ContentView: View {
                     Text("Profile").tag(1)
                     Text("Registry").tag(2)
                     Text("Router").tag(3)
+                    Text("Log").tag(4)
                 }.pickerStyle(.segmented).labelsHidden()
 
                 ScrollView {
@@ -26,7 +27,8 @@ struct ContentView: View {
                     case 0: BackendsSection()
                     case 1: ProfilesSection()
                     case 2: RegistrySection()
-                    default: RouterSection()
+                    case 3: RouterSection()
+                    default: LogSection()
                     }
                 }
             }
@@ -40,17 +42,30 @@ struct ContentView: View {
     }
 
     private var header: some View {
-        HStack {
-            Circle()
-                .fill(state.status == .running ? .green : (state.status == .stopped ? .red : .gray))
-                .frame(width: 9, height: 9)
-            Text("Router").bold()
-            Text(state.status == .running ? "läuft" : (state.status == .stopped ? "gestoppt" : "…"))
-                .foregroundStyle(.secondary).font(.caption)
-            Text(state.bindAddress).font(.caption).foregroundStyle(.tertiary)
-            Spacer()
-            if state.dirty {
-                Text("● ungespeichert").font(.caption).foregroundStyle(.orange)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Circle()
+                    .fill(state.status == .running ? .green : (state.status == .stopped ? .red : .gray))
+                    .frame(width: 9, height: 9)
+                Text("Router").bold()
+                Text(state.status == .running ? "läuft" : (state.status == .stopped ? "gestoppt" : "…"))
+                    .foregroundStyle(.secondary).font(.caption)
+                Text(state.bindAddress).font(.caption).foregroundStyle(.tertiary)
+                Spacer()
+                if state.dirty {
+                    Text("● ungespeichert").font(.caption).foregroundStyle(.orange)
+                }
+            }
+            if let s = state.snapshot?.totals_session {
+                HStack(spacing: 10) {
+                    Label("\(s.count) Aufrufe", systemImage: "arrow.left.arrow.right")
+                    Label(String(format: "%.0f tok/s", s.tokens_per_sec), systemImage: "speedometer")
+                    Label("\(s.tokens_out) Tokens", systemImage: "number")
+                    if s.cost_usd > 0 {
+                        Label(String(format: "$%.4f", s.cost_usd), systemImage: "dollarsign.circle")
+                    }
+                }
+                .font(.caption2).foregroundStyle(.secondary).labelStyle(.titleAndIcon)
             }
         }
     }
@@ -317,5 +332,68 @@ struct RouterSection: View {
             Spacer()
             Button("Router-Admin beenden") { NSApplication.shared.terminate(nil) }
         }.padding(.top, 4)
+    }
+}
+
+// MARK: - Log
+
+struct LogSection: View {
+    @EnvironmentObject var state: AppState
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let snap = state.snapshot {
+                HStack(spacing: 12) {
+                    totalsBox("Session", snap.totals_session)
+                    totalsBox("Heute (UTC)", snap.totals_today_utc)
+                }
+                Divider()
+                if snap.recent.isEmpty {
+                    Text("Noch keine Aufrufe in dieser Session.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    ForEach(snap.recent) { tx in
+                        VStack(alignment: .leading, spacing: 1) {
+                            HStack(spacing: 6) {
+                                Text(tx.timeString).font(.caption2).monospaced().foregroundStyle(.secondary)
+                                Text(tx.api).font(.caption2).padding(.horizontal, 3)
+                                    .background(.blue.opacity(0.15)).clipShape(Capsule())
+                                Text(tx.model_id).font(.caption).lineLimit(1).truncationMode(.middle)
+                                Spacer()
+                            }
+                            HStack(spacing: 8) {
+                                Text(tx.backend).font(.caption2).foregroundStyle(.tertiary)
+                                Text("· \(tx.profile)").font(.caption2).foregroundStyle(.tertiary)
+                                Spacer()
+                                Text("\(tx.tokens_out) tok").font(.caption2).foregroundStyle(.secondary)
+                                Text("\(tx.duration_ms) ms").font(.caption2).foregroundStyle(.tertiary)
+                                if let c = tx.cost_usd, c > 0 {
+                                    Text(String(format: "$%.4f", c)).font(.caption2).foregroundStyle(.tertiary)
+                                }
+                            }
+                        }
+                        Divider()
+                    }
+                }
+            } else {
+                ContentUnavailableView("Kein Log", systemImage: "list.bullet.rectangle",
+                                       description: Text("Router läuft nicht oder hat noch keine Aufrufe verarbeitet."))
+            }
+        }
+    }
+
+    private func totalsBox(_ title: String, _ t: TxTotals) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.caption2).foregroundStyle(.secondary)
+            Text("\(t.count) Aufrufe").font(.caption).bold()
+            Text(String(format: "%.0f tok/s · %d tok", t.tokens_per_sec, t.tokens_out))
+                .font(.caption2).foregroundStyle(.secondary)
+            if t.cost_usd > 0 {
+                Text(String(format: "$%.4f", t.cost_usd)).font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(6)
+        .background(.quaternary.opacity(0.4))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }

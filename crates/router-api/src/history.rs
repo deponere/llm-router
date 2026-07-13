@@ -19,6 +19,8 @@ pub struct Transaction {
     pub model_id: String,
     pub duration_ms: u64,
     pub cost_usd: Option<f64>,
+    /// Ausgegebene (Completion-)Tokens dieses Aufrufs — Basis für tok/s.
+    pub tokens_out: u64,
 }
 
 #[derive(Debug)]
@@ -77,6 +79,10 @@ impl Default for TransactionHistory {
 pub struct Totals {
     pub cost_usd: f64,
     pub count: usize,
+    pub tokens_out: u64,
+    /// Ausgabe-Tokens geteilt durch die aufsummierte Aufrufdauer (grobe
+    /// Durchsatz-Näherung inkl. Netzwerk/Queue, nicht reine Generierungsrate).
+    pub tokens_per_sec: f64,
 }
 
 #[derive(Debug, Serialize)]
@@ -91,11 +97,20 @@ pub struct Snapshot {
 fn totals_since(entries: &VecDeque<Transaction>, since: u64) -> Totals {
     let mut cost = 0.0;
     let mut count = 0;
+    let mut tokens_out = 0u64;
+    let mut duration_ms = 0u64;
     for e in entries.iter().filter(|t| t.unix_ts >= since) {
         cost += e.cost_usd.unwrap_or(0.0);
         count += 1;
+        tokens_out += e.tokens_out;
+        duration_ms += e.duration_ms;
     }
-    Totals { cost_usd: cost, count }
+    let tokens_per_sec = if duration_ms > 0 {
+        tokens_out as f64 / (duration_ms as f64 / 1000.0)
+    } else {
+        0.0
+    };
+    Totals { cost_usd: cost, count, tokens_out, tokens_per_sec }
 }
 
 /// Aktuelle Unix-Zeit in Sekunden. Geteilt von den Handlern fürs
@@ -107,4 +122,42 @@ pub fn now_unix() -> u64 {
 fn unix_utc_day_start() -> u64 {
     let now = now_unix();
     now - (now % 86_400)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tx(ts: u64, tokens_out: u64, duration_ms: u64) -> Transaction {
+        Transaction {
+            unix_ts: ts,
+            api: "openai".into(),
+            profile: "p".into(),
+            backend: "b".into(),
+            model_id: "m".into(),
+            duration_ms,
+            cost_usd: Some(0.01),
+            tokens_out,
+        }
+    }
+
+    #[test]
+    fn totals_aggregate_tokens_and_tps() {
+        let h = TransactionHistory::new();
+        // 300 Tokens in insgesamt 2000 ms -> 150 tok/s.
+        h.record(tx(now_unix(), 100, 500));
+        h.record(tx(now_unix(), 200, 1500));
+        let snap = h.snapshot(10);
+        assert_eq!(snap.totals_session.count, 2);
+        assert_eq!(snap.totals_session.tokens_out, 300);
+        assert!((snap.totals_session.tokens_per_sec - 150.0).abs() < 1e-6);
+        assert!((snap.totals_session.cost_usd - 0.02).abs() < 1e-9);
+    }
+
+    #[test]
+    fn tps_zero_when_no_duration() {
+        let h = TransactionHistory::new();
+        h.record(tx(now_unix(), 0, 0));
+        assert_eq!(h.snapshot(10).totals_session.tokens_per_sec, 0.0);
+    }
 }
