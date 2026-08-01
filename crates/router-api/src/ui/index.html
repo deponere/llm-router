@@ -101,6 +101,8 @@
   #benchResult th:nth-child(1), #benchResult td:nth-child(1) { width:26%; }
   #benchResult th:nth-child(6), #benchResult td:nth-child(6) { width:34%; }
   #benchResult td.bench-first div { display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+  /* Benchmark-Panel: volle Breite unter den zwei Kacheln (Request + Decision) */
+  #tab-explain .grid > .card:nth-child(3) { grid-column: 1 / -1; }
   .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
   .kpi { background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center; }
   .kpi .v { font-size:20px; font-weight:600; font-family:var(--mono); }
