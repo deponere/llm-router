@@ -16,6 +16,7 @@
 
 ### Fixed
 - `ServerAuthConfig`/`StorageConfig` defaults when the config section is missing (allow_ui, db_path)
+- **UI: Models-/Logs-Tab auf Viewport-Höhe** — nur die Tabelle/Log-Liste scrollt (Sticky-Header bleibt sichtbar), kein Doppel-Scroll der Seite mehr
 
 ## 0.1.0-beta.1 — first beta (2026-08-01)
 
