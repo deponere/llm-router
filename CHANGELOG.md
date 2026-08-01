@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-beta.1 — first beta (2026-08-01)
 
 ### Added
 - Web interface (`GET /` + `/ui`) — LightLLM-style single-file SPA with five tabs: chat playground (SSE streaming, profile/model controls, routing trace), sortable/filterable model catalog, routing explain dry-run (winner, ranking, rejected reasons), usage KPIs + call history, and a live log viewer
@@ -31,9 +31,7 @@
 - Honour `stream: false` on both APIs; aggregate `tool_calls` and usage for non-stream responses
 - Case-insensitive oMLX registry-override matching; AA client uses the `slug` field and strips `:free`
 
-## 0.1.0
-
-- Initial public release
+### Initial release
 - OpenAI-compatible endpoints: `GET /v1/models`, `POST /v1/chat/completions` (stream + non-stream)
 - Anthropic-compatible endpoint: `POST /v1/messages` with transparent OpenAI↔Anthropic translation (including `thinking`, tool use, image content blocks)
 - Deterministic expert system: profile resolve → hard filters → weighted scoring → provider flags (no LLM-in-the-loop, no random sampling)
