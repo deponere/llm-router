@@ -225,3 +225,6 @@ provider_require_parameters = true
 weights = { cost = 0, latency = 0.5, context = 0.2, preference = 0.3, quality = 0 }
 backend_allowlist = ["omlx"]
 preferences = ["qwen3-32b", "llama-3.3-70b", "qwen2.5-coder-32b"]
+
+[auth]
+enabled = false

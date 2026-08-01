@@ -190,10 +190,19 @@ Accepts the full Anthropic request format including `thinking`, tool use blocks,
 ### Observability
 
 ```
-GET  /                          web interface (chat playground, model catalog, routing explain, usage, logs)
+GET  /                          web interface (chat playground, model catalog, routing explain, usage, logs, settings)
 GET  /v1/transactions?limit=N   recent calls + session/today totals
+GET  /v1/stats?days=30          daily cost series from the SQLite history
+GET  /v1/breakdown?by=backend   cost/calls grouped by backend|profile|model|key
 GET  /v1/logs?limit=N           last log entries (in-memory ring buffer, loguru-structured)
 POST /v1/logs/clear             clear the log ring buffer
+GET  /v1/admin/config           current auth/storage/alerts settings
+POST /v1/admin/config           update settings ({ "set": { "alerts.webhook_url": "…" } })
+GET  /v1/admin/keys             configured API keys (masked hashes)
+POST /v1/admin/keys             create a key (plaintext returned exactly once)
+POST /v1/admin/keys/remove      delete a key
+POST /v1/admin/alerts/test      fire a test alert
+POST /v1/benchmark              parallel real calls to ≤3 models (TTFT/latency/tokens/cost)
 POST /v1/admin/restart          restart the router process (same binary/args, new session; poll /healthz after)
 ```
 
@@ -306,8 +315,10 @@ A LightLLM-style single-file web UI, embedded in the router (no build step, no e
 - **Chat** — playground with profile/model controls (system prompt, temperature, max tokens) and SSE streaming; every answer shows the routed model, tokens and cost, plus a collapsible routing trace (winner, ranking, rejected candidates).
 - **Models** — the full registry: context, in/out pricing, measured p95, AA Intelligence Index, modalities, capabilities, privacy class — sortable by column, filterable live.
 - **Explain** — dry-run of the expert system on any request body: winner, active weights, scored ranking and every rejected candidate with its reason.
-- **Usage** — session/today KPIs (calls, output tokens, tokens/s, cost) and the last 50 calls from `/v1/transactions`.
 - **Logs** — live view of the router's in-memory log buffer (last 500 entries, polled every 1.5 s), rendered loguru-style: `ts | LEVEL | target:line - message` with level colors, level filter, search, pause, clear and copy-as-text.
+- **Usage** — session/today KPIs plus a persistent cost history (SQLite): daily cost chart (7/30/90 days) and breakdowns by backend / profile / model / API key.
+- **Benchmark** — in the Explain tab: „Benchmark top 3" runs real parallel calls against the top-ranked candidates and compares TTFT, total latency, tokens and cost.
+- **Settings** — edit API keys + budgets, storage and alert settings in the browser (comment-preserving writes, save → auto-restart), plus `router-admin auth add|list|rm` and `alerts test` on the CLI.
 - **Theme** — dark / light / system switcher in the header (persisted in `localStorage`, no flash on load; `system` follows the OS appearance, including the log level colors).
 - **Language** — English (default), Deutsch, Español, Français — switchable in the header and persisted; number/date formatting follows the locale, default field values (system prompt, explain sample) translate too.
 - **Restart** — `🔄 Neu starten` in the header calls `POST /v1/admin/restart` and reloads once the router is back.

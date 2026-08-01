@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Router API keys + budgets** — `[server.auth]`: SHA-256-hashed `rk_…` keys (plaintext shown exactly once via CLI/Web), `x-api-key`/Bearer middleware on all LLM endpoints, per-key daily/monthly USD budgets enforced from SQLite spend; Web UI stays key-less via same-origin detection. `router-admin auth add|list|rm`, `POST /v1/admin/keys[+/remove]`
+- **Persistent usage history (SQLite)** — bundled rusqlite store mirroring every transaction (stream + non-stream, both APIs); `GET /v1/stats` (daily cost series) + `GET /v1/breakdown` (by backend/profile/model/key); retention purge on start; History chart + breakdown tables in the Usage tab
+- **Balance watchdog** — per-backend `watchdog = { enabled, min_balance, balance_currency, check_interval_secs }` polls `GET /user/balance` (DeepSeek format) in-process on every request (throttled); alerts on low balance
+- **Alerts (webhook + Telegram)** — `[alerts]`: generic webhook POST + Telegram `sendMessage`, per-event throttle (1/h), daily-cost threshold (once/UTC day); events: rotation failed/ok, backend down, balance low, cost threshold; `POST /v1/admin/alerts/test` + `router-admin alerts test`
+- **Benchmark panel** — `POST /v1/benchmark`: parallel real calls to up to 3 models, TTFT (first content or reasoning delta), total latency, tokens, cost; „Benchmark top 3" button in the Explain tab (with cost warning)
+- **Settings tab (Web) + CLI config** — edit auth/storage/alerts in the web UI (comment-preserving `toml_edit` writes, save → auto-restart), `POST /v1/admin/config`, `GET /v1/admin/config`
+- Housekeeping tick on every request: rotation + watchdog + backend health + cost threshold (throttled, never blocking)
+
+### Fixed
+- `ServerAuthConfig`/`StorageConfig` defaults when the config section is missing (allow_ui, db_path)
+
 ## 0.1.0-beta.1 — first beta (2026-08-01)
 
 ### Added
