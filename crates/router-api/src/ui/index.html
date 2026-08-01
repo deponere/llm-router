@@ -94,6 +94,13 @@
   .trace pre { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:10px; overflow:auto; max-height:300px; font-family:var(--mono); font-size:12px; white-space:pre-wrap; }
   /* Explain-Ergebnis: eigenes, begrenztes Scroll-Fenster statt vollem Tab-Scroll */
   #explainResult { max-height:45vh; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:10px; }
+  /* Benchmark-Ergebnis: passt in die Card — feste Breite, Umbruch, eigenes Fenster */
+  #benchResult { max-height:40vh; overflow:auto; border:1px solid var(--border); border-radius:8px; padding:10px; }
+  #benchResult table { table-layout:fixed; width:100%; }
+  #benchResult th, #benchResult td { white-space:normal; word-break:break-word; }
+  #benchResult th:nth-child(1), #benchResult td:nth-child(1) { width:26%; }
+  #benchResult th:nth-child(6), #benchResult td:nth-child(6) { width:34%; }
+  #benchResult td.bench-first div { display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
   .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
   .kpi { background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center; }
   .kpi .v { font-size:20px; font-weight:600; font-family:var(--mono); }
@@ -1123,7 +1130,7 @@ $("#benchBtn").onclick = async () => {
           <td class="num">${fmtMs(r.total_ms)}</td>
           <td class="num">${fmtNum(r.tokens_out)}</td>
           <td class="num">${fmtCost(r.cost_usd)}</td>
-          <td style="white-space:pre-wrap; max-width:280px">${esc(r.first_chunk || "")}…</td>
+          <td class="bench-first"><div>${esc(r.first_chunk || "")}…</div></td>
         </tr>`).join("");
     out.innerHTML = `<table><tr>
       <th>${t("benchmark.colModel")}</th><th class="num">${t("benchmark.colTtft")}</th>
