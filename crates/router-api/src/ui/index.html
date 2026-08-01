@@ -103,6 +103,7 @@
     <button data-tab="explain" data-i18n="nav.explain">🧭 Explain</button>
     <button data-tab="usage" data-i18n="nav.usage">📊 Usage</button>
     <button data-tab="logs" data-i18n="nav.logs">📜 Logs</button>
+    <button data-tab="settings" data-i18n="nav.settings">⚙️ Settings</button>
   </nav>
   <div class="status">
     <span><span id="dot" class="dot"></span> <span id="apiStatus" data-i18n="status.checking">checking…</span></span>
@@ -201,6 +202,67 @@
         <h3 data-i18n="explain.decision">Decision</h3>
         <div id="explainResult"><div class="hint" data-i18n="explain.hint">No dry-run executed. The expert system filters and scores all candidates deterministically.</div></div>
       </div>
+      <div class="card">
+        <h3 data-i18n="benchmark.title">Benchmark (live calls)</h3>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px">
+          <button class="primary" id="benchBtn" data-i18n="benchmark.run">Benchmark top 3</button>
+          <span class="hint" style="margin:0" data-i18n="benchmark.warn">real upstream calls — costs money</span>
+        </div>
+        <div id="benchResult" class="hint" data-i18n="benchmark.noExplain">Run an explain first — the top-3 ranked candidates get compared with real calls.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section class="tab" id="tab-settings">
+    <div class="card">
+      <h3 data-i18n="settings.auth">API keys &amp; budgets</h3>
+      <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:10px">
+        <label style="margin:0"><input type="checkbox" id="authEnabled"> <span data-i18n="settings.authEnabled">Protect LLM endpoints (x-api-key)</span></label>
+        <label style="margin:0"><input type="checkbox" id="authAllowUi"> <span data-i18n="settings.allowUi">Web UI stays key-less</span></label>
+      </div>
+      <table>
+        <thead><tr><th data-i18n="settings.keyName">Name</th><th data-i18n="settings.keyHash">Hash</th><th class="num" data-i18n="settings.keyDaily">Daily $</th><th class="num" data-i18n="settings.keyMonthly">Monthly $</th><th></th></tr></thead>
+        <tbody id="keyBody"><tr><td colspan="5" class="loading" data-i18n="usage.loading">Loading…</td></tr></tbody>
+      </table>
+      <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap; margin-top:10px">
+        <div style="flex:1; min-width:140px"><label data-i18n="settings.keyName">Name</label><input type="text" id="newKeyName" placeholder="pi"></div>
+        <div style="width:110px"><label data-i18n="settings.keyDaily">Daily $</label><input type="number" id="newKeyDaily" min="0" step="0.5" placeholder="—"></div>
+        <div style="width:120px"><label data-i18n="settings.keyMonthly">Monthly $</label><input type="number" id="newKeyMonthly" min="0" step="5" placeholder="—"></div>
+        <button class="ghost" id="newKeyBtn" data-i18n="settings.createKey">＋ Create key</button>
+      </div>
+      <div id="newKeyOut" style="margin-top:10px"></div>
+      <div class="hint" id="authHint"></div>
+    </div>
+    <div class="card">
+      <h3 data-i18n="settings.storage">Storage</h3>
+      <label data-i18n="settings.dbPath">SQLite path (relative = config dir)</label>
+      <input type="text" id="cfgDbPath">
+      <label data-i18n="settings.retentionDays">Retention (days, 0 = keep all)</label>
+      <input type="number" id="cfgRetention" min="0" step="7">
+    </div>
+    <div class="card">
+      <h3 data-i18n="settings.alerts">Alerts</h3>
+      <label data-i18n="settings.webhookUrl">Webhook URL</label>
+      <input type="text" id="cfgWebhook" placeholder="https://…">
+      <label data-i18n="settings.tgTokenEnv">Telegram bot token env var</label>
+      <input type="text" id="cfgTgToken">
+      <label data-i18n="settings.tgChatId">Telegram chat ID</label>
+      <input type="text" id="cfgTgChat">
+      <label data-i18n="settings.costThreshold">Daily cost threshold USD (0 = off)</label>
+      <input type="number" id="cfgCostThreshold" min="0" step="0.5">
+      <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:10px">
+        <label style="margin:0"><input type="checkbox" id="evRotationFailed"> <span data-i18n="settings.rotationFailed">Rotation failed</span></label>
+        <label style="margin:0"><input type="checkbox" id="evRotationSucceeded"> <span data-i18n="settings.rotationSucceeded">Rotation ok</span></label>
+        <label style="margin:0"><input type="checkbox" id="evBackendDown"> <span data-i18n="settings.backendDown">Backend down</span></label>
+        <label style="margin:0"><input type="checkbox" id="evBalanceLow"> <span data-i18n="settings.balanceLow">Balance low</span></label>
+        <label style="margin:0"><input type="checkbox" id="evCostThreshold"> <span data-i18n="settings.costThresholdEvent">Cost threshold</span></label>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:14px">
+        <button class="primary" id="saveCfgBtn" data-i18n="settings.save">Save &amp; restart</button>
+        <button class="ghost" id="testAlertBtn" data-i18n="settings.testAlert">🔔 Test alert</button>
+      </div>
+      <div class="error" id="cfgErr"></div>
     </div>
   </section>
 
@@ -213,6 +275,35 @@
     <div class="card">
       <h3 data-i18n="usage.today">Today (UTC)</h3>
       <div class="kpis" id="kpiToday"></div>
+    </div>
+    <div class="card">
+      <h3 data-i18n="usage.history">History</h3>
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:8px; flex-wrap:wrap">
+        <label style="margin:0" data-i18n="usage.days">Days</label>
+        <select id="statDays" style="width:auto">
+          <option value="7">7</option>
+          <option value="30" selected>30</option>
+          <option value="90">90</option>
+        </select>
+      </div>
+      <div id="statChart" style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px; overflow:auto"></div>
+      <div class="hint" id="statHint"></div>
+    </div>
+    <div class="card">
+      <h3 data-i18n="usage.breakdown">Breakdown</h3>
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:8px; flex-wrap:wrap">
+        <label style="margin:0" data-i18n="usage.by">Group by</label>
+        <select id="bdBy" style="width:auto">
+          <option value="backend" data-i18n="usage.colBackend">Backend</option>
+          <option value="profile" data-i18n="usage.colProfile">Profile</option>
+          <option value="model" data-i18n="usage.colModel">Model</option>
+          <option value="key" data-i18n="usage.key">API key</option>
+        </select>
+      </div>
+      <table>
+        <thead><tr><th data-i18n="usage.bdGroup">Group</th><th class="num" data-i18n="usage.colCost">Cost</th><th class="num" data-i18n="usage.calls">Calls</th></tr></thead>
+        <tbody id="bdBody"><tr><td colspan="3" class="loading" data-i18n="usage.loading">Loading…</td></tr></tbody>
+      </table>
     </div>
     <div class="card">
       <h3 data-i18n="usage.recent">Recent calls</h3>
@@ -290,7 +381,27 @@ en: {
   "logs.empty": "(no entries for this filter)", "logs.entries": "entries", "logs.filtered": "filtered",
   "logs.hint": "Live polling (1.5 s) · in-memory ring buffer (last 500 entries) · loguru format: <code>ts | LEVEL | target:line - message</code>",
   "restart.btn": "🔄 Restart", "restart.confirm": "Really restart the router? Brief interruption (~2 s).",
-  "restart.restarting": "⏳ Restarting…", "restart.timeout": "Router not responding — reload the page?"
+  "restart.restarting": "⏳ Restarting…", "restart.timeout": "Router not responding — reload the page?",
+  "nav.settings": "⚙️ Settings",
+  "usage.history": "History", "usage.days": "Days", "usage.breakdown": "Breakdown", "usage.by": "Group by",
+  "usage.key": "API key", "usage.bdGroup": "Group", "usage.noData": "no data yet",
+  "benchmark.title": "Benchmark (live calls)", "benchmark.run": "Benchmark top 3",
+  "benchmark.warn": "real upstream calls — costs money", "benchmark.noExplain": "Run an explain first — the top-3 ranked candidates get compared with real calls.",
+  "benchmark.running": "Running…", "benchmark.colModel": "Model", "benchmark.colTtft": "TTFT", "benchmark.colTotal": "Total",
+  "benchmark.colTokens": "Tok out", "benchmark.colCost": "Cost", "benchmark.colFirst": "First chunk", "benchmark.error": "Error",
+  "settings.auth": "API keys & budgets", "settings.authEnabled": "Protect LLM endpoints (x-api-key)",
+  "settings.allowUi": "Web UI stays key-less", "settings.keyName": "Name", "settings.keyHash": "Hash",
+  "settings.keyDaily": "Daily $", "settings.keyMonthly": "Monthly $", "settings.createKey": "＋ Create key",
+  "settings.keyCreated": "Key created — copy it now, shown only once:", "settings.restartHint": "Restart required for auth changes.",
+  "settings.remove": "🗑", "settings.noKeys": "No keys configured.",
+  "settings.storage": "Storage", "settings.dbPath": "SQLite path (relative = config dir)",
+  "settings.retentionDays": "Retention (days, 0 = keep all)",
+  "settings.alerts": "Alerts", "settings.webhookUrl": "Webhook URL", "settings.tgTokenEnv": "Telegram bot token env var",
+  "settings.tgChatId": "Telegram chat ID", "settings.costThreshold": "Daily cost threshold USD (0 = off)",
+  "settings.rotationFailed": "Rotation failed", "settings.rotationSucceeded": "Rotation ok",
+  "settings.backendDown": "Backend down", "settings.balanceLow": "Balance low", "settings.costThresholdEvent": "Cost threshold",
+  "settings.save": "Save & restart", "settings.testAlert": "🔔 Test alert", "settings.saved": "Saved — restarting…",
+  "settings.alertSent": "Test alert triggered."
 },
 de: {
   "app.title": "LLM Router · Web-Interface",
@@ -327,7 +438,28 @@ de: {
   "logs.empty": "(keine Einträge für diesen Filter)", "logs.entries": "Einträge", "logs.filtered": "gefiltert",
   "logs.hint": "Live-Polling (1,5 s) · In-Memory-Ringbuffer (letzte 500 Einträge) · Format wie loguru: <code>ts | LEVEL | target:line - message</code>",
   "restart.btn": "🔄 Neu starten", "restart.confirm": "Router wirklich neu starten? Kurze Unterbrechung (~2 s).",
-  "restart.restarting": "⏳ Neustart…", "restart.timeout": "Router antwortet nicht — Seite neu laden?"
+  "restart.restarting": "⏳ Neustart…", "restart.timeout": "Router antwortet nicht — Seite neu laden?",
+  "nav.settings": "⚙️ Einstellungen",
+  "usage.history": "Verlauf", "usage.days": "Tage", "usage.breakdown": "Aufschlüsselung", "usage.by": "Gruppieren nach",
+  "usage.key": "API-Key", "usage.bdGroup": "Gruppe", "usage.noData": "noch keine Daten",
+  "benchmark.title": "Benchmark (echte Aufrufe)", "benchmark.run": "Benchmark Top 3",
+  "benchmark.warn": "echte Upstream-Aufrufe — kostet Geld", "benchmark.noExplain": "Erst Erklärung ausführen — die Top-3-Kandidaten werden mit echten Aufrufen verglichen.",
+  "benchmark.running": "Läuft…", "benchmark.colModel": "Modell", "benchmark.colTtft": "TTFT",
+  "benchmark.colTotal": "Gesamt", "benchmark.colTokens": "Tok out", "benchmark.colCost": "Kosten",
+  "benchmark.colFirst": "Erster Chunk", "benchmark.error": "Fehler",
+  "settings.auth": "API-Keys & Budgets", "settings.authEnabled": "LLM-Endpoints schützen (x-api-key)",
+  "settings.allowUi": "Web-UI bleibt ohne Key", "settings.keyName": "Name", "settings.keyHash": "Hash",
+  "settings.keyDaily": "Tages-$", "settings.keyMonthly": "Monats-$", "settings.createKey": "＋ Key anlegen",
+  "settings.keyCreated": "Key erstellt — jetzt kopieren, wird nur einmal angezeigt:", "settings.restartHint": "Neustart nötig für Auth-Änderungen.",
+  "settings.remove": "🗑", "settings.noKeys": "Keine Keys konfiguriert.",
+  "settings.storage": "Speicher", "settings.dbPath": "SQLite-Pfad (relativ = Config-Verzeichnis)",
+  "settings.retentionDays": "Aufbewahrung (Tage, 0 = alles behalten)",
+  "settings.alerts": "Alerts", "settings.webhookUrl": "Webhook-URL", "settings.tgTokenEnv": "Telegram-Bot-Token-Env-Var",
+  "settings.tgChatId": "Telegram-Chat-ID", "settings.costThreshold": "Tageskosten-Schwelle USD (0 = aus)",
+  "settings.rotationFailed": "Rotation fehlgeschlagen", "settings.rotationSucceeded": "Rotation ok",
+  "settings.backendDown": "Backend down", "settings.balanceLow": "Balance niedrig", "settings.costThresholdEvent": "Kosten-Schwelle",
+  "settings.save": "Speichern & neu starten", "settings.testAlert": "🔔 Test-Alert", "settings.saved": "Gespeichert — Neustart…",
+  "settings.alertSent": "Test-Alert ausgelöst."
 },
 es: {
   "app.title": "LLM Router · Interfaz web",
@@ -364,7 +496,28 @@ es: {
   "logs.empty": "(sin entradas para este filtro)", "logs.entries": "entradas", "logs.filtered": "filtradas",
   "logs.hint": "Sondeo en vivo (1,5 s) · búfer circular en memoria (últimas 500 entradas) · formato loguru: <code>ts | LEVEL | target:line - mensaje</code>",
   "restart.btn": "🔄 Reiniciar", "restart.confirm": "¿Reiniciar el router? Breve interrupción (~2 s).",
-  "restart.restarting": "⏳ Reiniciando…", "restart.timeout": "El router no responde: ¿recargar la página?"
+  "restart.restarting": "⏳ Reiniciando…", "restart.timeout": "El router no responde: ¿recargar la página?",
+  "nav.settings": "⚙️ Ajustes",
+  "usage.history": "Historial", "usage.days": "Días", "usage.breakdown": "Desglose", "usage.by": "Agrupar por",
+  "usage.key": "Clave API", "usage.bdGroup": "Grupo", "usage.noData": "sin datos todavía",
+  "benchmark.title": "Benchmark (llamadas reales)", "benchmark.run": "Evaluar top 3",
+  "benchmark.warn": "llamadas reales — cuestan dinero", "benchmark.noExplain": "Ejecuta primero la explicación: los 3 mejores candidatos se comparan con llamadas reales.",
+  "benchmark.running": "Ejecutando…", "benchmark.colModel": "Modelo", "benchmark.colTtft": "TTFT",
+  "benchmark.colTotal": "Total", "benchmark.colTokens": "Tok sal.", "benchmark.colCost": "Coste",
+  "benchmark.colFirst": "Primer fragmento", "benchmark.error": "Error",
+  "settings.auth": "Claves API y presupuestos", "settings.authEnabled": "Proteger endpoints LLM (x-api-key)",
+  "settings.allowUi": "Web UI sin clave", "settings.keyName": "Nombre", "settings.keyHash": "Hash",
+  "settings.keyDaily": "$/día", "settings.keyMonthly": "$/mes", "settings.createKey": "＋ Crear clave",
+  "settings.keyCreated": "Clave creada — cópiala ahora, solo se muestra una vez:", "settings.restartHint": "Reinicio necesario para cambios de auth.",
+  "settings.remove": "🗑", "settings.noKeys": "Sin claves configuradas.",
+  "settings.storage": "Almacenamiento", "settings.dbPath": "Ruta SQLite (relativa = dir. de config)",
+  "settings.retentionDays": "Retención (días, 0 = conservar todo)",
+  "settings.alerts": "Alertas", "settings.webhookUrl": "URL webhook", "settings.tgTokenEnv": "Var. de entorno token bot Telegram",
+  "settings.tgChatId": "ID de chat Telegram", "settings.costThreshold": "Umbral de coste diario USD (0 = off)",
+  "settings.rotationFailed": "Rotación fallida", "settings.rotationSucceeded": "Rotación ok",
+  "settings.backendDown": "Backend caído", "settings.balanceLow": "Saldo bajo", "settings.costThresholdEvent": "Umbral de coste",
+  "settings.save": "Guardar y reiniciar", "settings.testAlert": "🔔 Alertar de prueba", "settings.saved": "Guardado — reiniciando…",
+  "settings.alertSent": "Alerta de prueba enviada."
 },
 fr: {
   "app.title": "LLM Router · Interface web",
@@ -401,8 +554,29 @@ fr: {
   "logs.empty": "(aucune entrée pour ce filtre)", "logs.entries": "entrées", "logs.filtered": "filtrées",
   "logs.hint": "Sondage en direct (1,5 s) · tampon circulaire en mémoire (500 dernières entrées) · format loguru : <code>ts | LEVEL | target:line - message</code>",
   "restart.btn": "🔄 Redémarrer", "restart.confirm": "Redémarrer le routeur ? Brève interruption (~2 s).",
-  "restart.restarting": "⏳ Redémarrage…", "restart.timeout": "Le routeur ne répond pas — recharger la page ?"
-}
+  "restart.restarting": "⏳ Redémarrage…", "restart.timeout": "Le routeur ne répond pas — recharger la page ?",
+  "nav.settings": "⚙️ Paramètres",
+  "usage.history": "Historique", "usage.days": "Jours", "usage.breakdown": "Répartition", "usage.by": "Grouper par",
+  "usage.key": "Clé API", "usage.bdGroup": "Groupe", "usage.noData": "pas encore de données",
+  "benchmark.title": "Benchmark (appels réels)", "benchmark.run": "Comparer top 3",
+  "benchmark.warn": "appels réels — coûtent de l'argent", "benchmark.noExplain": "Lancez d'abord une explication — les 3 meilleurs candidats sont comparés avec des appels réels.",
+  "benchmark.running": "En cours…", "benchmark.colModel": "Modèle", "benchmark.colTtft": "TTFT",
+  "benchmark.colTotal": "Total", "benchmark.colTokens": "Tok sortie", "benchmark.colCost": "Coût",
+  "benchmark.colFirst": "Premier morceau", "benchmark.error": "Erreur",
+  "settings.auth": "Clés API et budgets", "settings.authEnabled": "Protéger les endpoints LLM (x-api-key)",
+  "settings.allowUi": "Web UI sans clé", "settings.keyName": "Nom", "settings.keyHash": "Hash",
+  "settings.keyDaily": "$/jour", "settings.keyMonthly": "$/mois", "settings.createKey": "＋ Créer une clé",
+  "settings.keyCreated": "Clé créée — copiez-la maintenant, affichée une seule fois :", "settings.restartHint": "Redémarrage nécessaire pour les changements d'auth.",
+  "settings.remove": "🗑", "settings.noKeys": "Aucune clé configurée.",
+  "settings.storage": "Stockage", "settings.dbPath": "Chemin SQLite (relatif = dossier de config)",
+  "settings.retentionDays": "Conservation (jours, 0 = tout garder)",
+  "settings.alerts": "Alertes", "settings.webhookUrl": "URL du webhook", "settings.tgTokenEnv": "Variable d'env. du token bot Telegram",
+  "settings.tgChatId": "ID de chat Telegram", "settings.costThreshold": "Seuil de coût journalier USD (0 = off)",
+  "settings.rotationFailed": "Rotation échouée", "settings.rotationSucceeded": "Rotation ok",
+  "settings.backendDown": "Backend hors ligne", "settings.balanceLow": "Solde faible", "settings.costThresholdEvent": "Seuil de coût",
+  "settings.save": "Enregistrer et redémarrer", "settings.testAlert": "🔔 Alerte de test", "settings.saved": "Enregistré — redémarrage…",
+  "settings.alertSent": "Alerte de test déclenchée."
+},
 };
 
 function curLang() { return localStorage.getItem("router-lang") || "en"; }
@@ -438,6 +612,8 @@ function applyLang() {
   if (lastTrace) renderTrace(lastTrace);
   if (lastExplain) renderExplain(lastExplain);
   if (lastUsage) renderUsage(lastUsage);
+  if (lastStats) renderChart(lastStats);
+  if (lastBd) renderBreakdown(lastBd);
   if (allModels.length) renderModels();
   if (logCache.length) renderLogs();
 }
@@ -454,8 +630,9 @@ document.querySelectorAll("#nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("#nav button").forEach(x => x.classList.toggle("active", x === b));
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.id === "tab-" + b.dataset.tab));
   if (b.dataset.tab === "models") loadModels();
-  if (b.dataset.tab === "usage") loadUsage();
+  if (b.dataset.tab === "usage") { loadUsage(); loadStats(); loadBreakdown(); }
   if (b.dataset.tab === "logs") refreshLogs();
+  if (b.dataset.tab === "settings") loadSettings();
 });
 
 /* ---------- Theme (dark / light / system) ---------- */
@@ -774,6 +951,63 @@ function renderUsage(d) {
   </tr>`).join("") || `<tr><td colspan="8" class="hint">${t("usage.empty")}</td></tr>`;
 }
 
+/* ---------- Stats/Chart (SQLite-Historie) ---------- */
+let lastStats = null;
+async function loadStats() {
+  try {
+    const days = $("#statDays").value;
+    const d = await api(`/v1/stats?days=${days}`);
+    lastStats = d;
+    renderChart(d);
+  } catch (e) {
+    $("#statChart").innerHTML = `<span class="error">${esc(e.message)}</span>`;
+  }
+}
+function renderChart(d) {
+  const series = d.series || [];
+  const box = $("#statChart");
+  if (!series.length) {
+    box.innerHTML = `<span class="hint">${t("usage.noData")}</span>`;
+    $("#statHint").textContent = "";
+    return;
+  }
+  const max = Math.max(...series.map(p => p.cost_usd), 0.0001);
+  const H = 160, barW = Math.max(3, Math.min(26, (900 - 20) / series.length - 3));
+  const gap = barW + 3;
+  const inner = series.map((p, i) => {
+    const h = Math.max(2, (p.cost_usd / max) * (H - 30));
+    const x = i * gap + 10;
+    const day = new Date(p.day_unix * 1000).toISOString().slice(0, 10);
+    const title = `${day} — $${p.cost_usd.toFixed(4)} · ${p.count} ${t("usage.calls").toLowerCase()}`;
+    return `<rect x="${x}" y="${H - 10 - h}" width="${barW}" height="${h}" fill="var(--accent)" opacity="${0.55 + 0.45 * (p.cost_usd / max)}"><title>${esc(title)}</title></rect>`;
+  }).join("");
+  const totalW = series.length * gap + 12;
+  box.innerHTML = `<svg width="${totalW}" height="${H}" viewBox="0 0 ${totalW} ${H}" xmlns="http://www.w3.org/2000/svg" style="min-width:100%">${inner}</svg>`;
+  $("#statHint").textContent = `${t("usage.history")}: $${d.total_cost_usd.toFixed(4)} · ${d.total_calls} ${t("usage.calls").toLowerCase()} (${d.days} ${t("usage.days").toLowerCase()})`;
+}
+$("#statDays").onchange = loadStats;
+
+/* ---------- Breakdown ---------- */
+let lastBd = null;
+async function loadBreakdown() {
+  try {
+    const d = await api(`/v1/breakdown?days=7&by=${$("#bdBy").value}&limit=12`);
+    lastBd = d;
+    renderBreakdown(d);
+  } catch (e) {
+    $("#bdBody").innerHTML = `<tr><td colspan="3" class="error">${esc(e.message)}</td></tr>`;
+  }
+}
+function renderBreakdown(d) {
+  const rows = (d.rows || []).map(r => `<tr>
+    <td>${esc(r.group)}</td>
+    <td class="num">${fmtUsd(r.cost_usd)}</td>
+    <td class="num">${fmtNum(r.count)}</td>
+  </tr>`).join("");
+  $("#bdBody").innerHTML = rows || `<tr><td colspan="3" class="hint">${t("usage.noData")}</td></tr>`;
+}
+$("#bdBy").onchange = loadBreakdown;
+
 /* ---------- Logs (loguru style) ---------- */
 const LOG_PALETTES = {
   dark:  { TRACE: "#8b949e", DEBUG: "#79c0ff", INFO: "#3fb950", WARNING: "#d29922", ERROR: "#f85149" },
@@ -848,6 +1082,147 @@ $("#logCopy").onclick = async () => {
   } catch {}
 };
 setInterval(() => { if ($("#tab-logs").classList.contains("active")) refreshLogs(); }, 1500);
+
+/* ---------- Benchmark (Feature #5) ---------- */
+$("#benchBtn").onclick = async () => {
+  const out = $("#benchResult");
+  const ranked = (lastExplain?.trace?.ranked || []).slice(0, 3);
+  if (!ranked.length) {
+    out.innerHTML = `<span class="error">${t("benchmark.noExplain")}</span>`;
+    return;
+  }
+  if (!confirm(`${t("benchmark.warn")} — ${ranked.map(r => r.model_id).join(" vs ")}?`)) return;
+  const btn = $("#benchBtn");
+  btn.disabled = true;
+  out.innerHTML = `<span class="loading">${t("benchmark.running")}</span>`;
+  try {
+    let msgs;
+    try { msgs = JSON.parse($("#explainBody").value).messages || []; } catch { msgs = []; }
+    const d = await api("/v1/benchmark", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: msgs, models: ranked.map(r => r.model_id), max_tokens: 512 }),
+    });
+    const rows = (d.results || []).map(r => r.error
+      ? `<tr><td>${esc(r.model_id)}</td><td colspan="6" class="error">${esc(r.error)}</td></tr>`
+      : `<tr>
+          <td>${esc(r.model_id)} <span class="badge">${esc(r.backend)}</span></td>
+          <td class="num">${r.ttft_ms ?? "—"} ms</td>
+          <td class="num">${fmtMs(r.total_ms)}</td>
+          <td class="num">${fmtNum(r.tokens_out)}</td>
+          <td class="num">${fmtCost(r.cost_usd)}</td>
+          <td style="white-space:pre-wrap; max-width:280px">${esc(r.first_chunk || "")}…</td>
+        </tr>`).join("");
+    out.innerHTML = `<table><tr>
+      <th>${t("benchmark.colModel")}</th><th class="num">${t("benchmark.colTtft")}</th>
+      <th class="num">${t("benchmark.colTotal")}</th><th class="num">${t("benchmark.colTokens")}</th>
+      <th class="num">${t("benchmark.colCost")}</th><th>${t("benchmark.colFirst")}</th>
+    </tr>${rows}</table>`;
+  } catch (e) {
+    out.innerHTML = `<span class="error">${t("benchmark.error")}: ${esc(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+/* ---------- Settings (Feature #1/#3/#4) ---------- */
+async function loadSettings() {
+  try {
+    const [cfg, keys] = await Promise.all([api("/v1/admin/config"), api("/v1/admin/keys")]);
+    $("#authEnabled").checked = cfg.auth.enabled;
+    $("#authAllowUi").checked = cfg.auth.allow_ui;
+    $("#cfgDbPath").value = cfg.storage.db_path || "";
+    $("#cfgRetention").value = cfg.storage.retention_days ?? 90;
+    $("#cfgWebhook").value = cfg.alerts.webhook_url || "";
+    $("#cfgTgToken").value = cfg.alerts.telegram_token_env || "";
+    $("#cfgTgChat").value = cfg.alerts.telegram_chat_id || "";
+    $("#cfgCostThreshold").value = cfg.alerts.daily_cost_threshold_usd ?? 0;
+    $("#evRotationFailed").checked = cfg.alerts.events.rotation_failed;
+    $("#evRotationSucceeded").checked = cfg.alerts.events.rotation_succeeded;
+    $("#evBackendDown").checked = cfg.alerts.events.backend_down;
+    $("#evBalanceLow").checked = cfg.alerts.events.balance_low;
+    $("#evCostThreshold").checked = cfg.alerts.events.daily_cost_threshold;
+    const rows = (keys.keys || []).map(k => `<tr>
+      <td>${esc(k.name)}</td>
+      <td style="font-family:var(--mono); font-size:11px">${esc(k.hash_prefix || "")}</td>
+      <td class="num">${k.daily_budget_usd ?? "—"}</td>
+      <td class="num">${k.monthly_budget_usd ?? "—"}</td>
+      <td><button class="ghost" data-delkey="${esc(k.name)}">${t("settings.remove")}</button></td>
+    </tr>`).join("");
+    $("#keyBody").innerHTML = rows || `<tr><td colspan="5" class="hint">${t("settings.noKeys")}</td></tr>`;
+    document.querySelectorAll("[data-delkey]").forEach(b => b.onclick = async () => {
+      if (!confirm(`Delete key '${b.dataset.delkey}'?`)) return;
+      try {
+        await api("/v1/admin/keys/remove", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: b.dataset.delkey }) });
+        loadSettings();
+        $("#authHint").textContent = t("settings.restartHint");
+      } catch (e) { $("#cfgErr").textContent = e.message; }
+    });
+    $("#authHint").textContent = "";
+  } catch (e) {
+    $("#keyBody").innerHTML = `<tr><td colspan="5" class="error">${esc(e.message)}</td></tr>`;
+  }
+}
+$("#newKeyBtn").onclick = async () => {
+  const name = $("#newKeyName").value.trim();
+  if (!name) { $("#newKeyOut").innerHTML = `<span class="error">name required</span>`; return; }
+  const daily = parseFloat($("#newKeyDaily").value) || null;
+  const monthly = parseFloat($("#newKeyMonthly").value) || null;
+  try {
+    const d = await api("/v1/admin/keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, daily_budget_usd: daily, monthly_budget_usd: monthly }),
+    });
+    $("#newKeyOut").innerHTML = `<div class="error" style="color:var(--warn)">${t("settings.keyCreated")}</div>
+      <div style="font-family:var(--mono); background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px 10px; margin-top:6px; word-break:break-all">${esc(d.key)}</div>
+      <button class="ghost" style="margin-top:6px" onclick="navigator.clipboard.writeText('${esc(d.key)}')">📋 Copy</button>
+      <div class="hint">${t("settings.restartHint")}</div>`;
+    $("#newKeyName").value = "";
+    loadSettings();
+  } catch (e) { $("#newKeyOut").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+};
+$("#saveCfgBtn").onclick = async () => {
+  const set = {
+    "auth.enabled": $("#authEnabled").checked,
+    "auth.allow_ui": $("#authAllowUi").checked,
+    "storage.db_path": $("#cfgDbPath").value.trim() || "data/router.sqlite",
+    "storage.retention_days": parseInt($("#cfgRetention").value, 10) || 0,
+    "alerts.webhook_url": $("#cfgWebhook").value.trim(),
+    "alerts.telegram_token_env": $("#cfgTgToken").value.trim(),
+    "alerts.telegram_chat_id": $("#cfgTgChat").value.trim(),
+    "alerts.daily_cost_threshold_usd": parseFloat($("#cfgCostThreshold").value) || 0,
+    "alerts.events.rotation_failed": $("#evRotationFailed").checked,
+    "alerts.events.rotation_succeeded": $("#evRotationSucceeded").checked,
+    "alerts.events.backend_down": $("#evBackendDown").checked,
+    "alerts.events.balance_low": $("#evBalanceLow").checked,
+    "alerts.events.daily_cost_threshold": $("#evCostThreshold").checked,
+  };
+  const btn = $("#saveCfgBtn");
+  btn.disabled = true;
+  try {
+    await api("/v1/admin/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ set }) });
+    $("#cfgErr").textContent = t("settings.saved");
+    // Neustart anstoßen + warten wie beim Restart-Button
+    try { await fetch("/v1/admin/restart", { method: "POST" }); } catch {}
+    const t0 = Date.now();
+    while (Date.now() - t0 < 20000) {
+      await new Promise(r => setTimeout(r, 500));
+      try { const r = await fetch("/healthz", { cache: "no-store" }); if (r.ok) { location.reload(); return; } } catch {}
+    }
+    btn.disabled = false;
+    alert(t("restart.timeout"));
+  } catch (e) {
+    btn.disabled = false;
+    $("#cfgErr").textContent = e.message;
+  }
+};
+$("#testAlertBtn").onclick = async () => {
+  try {
+    await api("/v1/admin/alerts/test", { method: "POST" });
+    $("#cfgErr").textContent = t("settings.alertSent");
+  } catch (e) { $("#cfgErr").textContent = e.message; }
+};
 
 applyLang();
 loadProfiles();

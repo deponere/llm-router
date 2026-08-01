@@ -146,6 +146,34 @@ pub async fn admin_keys_remove(
     Ok(Json(json!({ "removed": name, "restart_required": true })))
 }
 
+/// `GET /v1/admin/config` — relevante Einstellungs-Sektionen für den Settings-Tab.
+pub async fn admin_config_get(State(state): State<AppState>) -> Json<Value> {
+    let c = &state.config;
+    Json(json!({
+        "auth": {
+            "enabled": c.auth.enabled,
+            "allow_ui": c.auth.allow_ui,
+        },
+        "storage": {
+            "db_path": c.storage.db_path,
+            "retention_days": c.storage.retention_days,
+        },
+        "alerts": {
+            "webhook_url": c.alerts.webhook_url,
+            "telegram_token_env": c.alerts.telegram_token_env,
+            "telegram_chat_id": c.alerts.telegram_chat_id,
+            "daily_cost_threshold_usd": c.alerts.daily_cost_threshold_usd,
+            "events": {
+                "rotation_failed": c.alerts.events.rotation_failed,
+                "rotation_succeeded": c.alerts.events.rotation_succeeded,
+                "backend_down": c.alerts.events.backend_down,
+                "balance_low": c.alerts.events.balance_low,
+                "daily_cost_threshold": c.alerts.events.daily_cost_threshold,
+            },
+        },
+    }))
+}
+
 /// `POST /v1/admin/config` — setzt einen verschachtelten Config-Wert (dotted key)
 /// per toml_edit; wirksam nach Neustart. Body: `{"set": {"alerts.webhook_url": "…"}}`.
 pub async fn admin_config_set(

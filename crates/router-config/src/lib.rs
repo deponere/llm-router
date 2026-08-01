@@ -38,7 +38,7 @@ pub struct ServerConfig {
     pub bind: String,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServerAuthConfig {
     /// `true` = LLM-Endpoints verlangen `x-api-key` (bzw. Bearer) eines konfigurierten Keys.
     #[serde(default)]
@@ -49,6 +49,16 @@ pub struct ServerAuthConfig {
     /// Konfigurierte Schlüssel — nur SHA-256-Hashes, nie Plaintext.
     #[serde(default)]
     pub keys: Vec<AuthKey>,
+}
+
+impl Default for ServerAuthConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            allow_ui: true,
+            keys: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -64,7 +74,7 @@ pub struct AuthKey {
     pub monthly_budget_usd: Option<f64>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct StorageConfig {
     /// Pfad zur SQLite-Datenbank; relativ wird gegen das Config-Verzeichnis aufgelöst.
     #[serde(default = "default_db_path")]
@@ -72,6 +82,15 @@ pub struct StorageConfig {
     /// Aufbewahrungsdauer der Transactions in Tagen (alter als das wird beim Start gelöscht; 0 = nie).
     #[serde(default = "default_retention_days")]
     pub retention_days: u32,
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            db_path: default_db_path(),
+            retention_days: default_retention_days(),
+        }
+    }
 }
 
 fn default_db_path() -> String { "data/router.sqlite".into() }

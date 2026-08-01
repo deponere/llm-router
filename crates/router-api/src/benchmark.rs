@@ -18,7 +18,7 @@ pub async fn benchmark(
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let messages = body.get("messages").cloned().unwrap_or_else(|| json!([]));
-    let max_tokens = body.get("max_tokens").and_then(|v| v.as_u64()).unwrap_or(256).min(4096);
+    let max_tokens = body.get("max_tokens").and_then(|v| v.as_u64()).unwrap_or(512).min(4096);
     let temperature = body.get("temperature").and_then(|v| v.as_f64()).unwrap_or(0.7);
     let models: Vec<String> = body
         .get("models")
@@ -108,16 +108,23 @@ async fn run_one(
     let mut cost: Option<f64> = None;
     let mut buf: Vec<u8> = Vec::new();
     let mut chunks = 0usize;
+    let mut parsed_events = 0usize;
+    let mut first_bytes: Option<usize> = None;
 
     let mut stream = Box::pin(stream);
     loop {
         match stream.next().await {
             Some(Ok(bytes)) => {
+                if first_bytes.is_none() {
+                    first_bytes = Some(bytes.len());
+                    tracing::debug!(model_id, n = bytes.len(), "benchmark first chunk bytes");
+                }
                 buf.extend_from_slice(&bytes);
                 while let Some(pos) = find_boundary(&buf) {
                     let data = std::str::from_utf8(&buf[..pos]).unwrap_or("").to_string();
                     buf.drain(..pos + 2.min(buf.len() - pos));
                     if let Some(v) = parse_sse_json(&data) {
+                        parsed_events += 1;
                         if let Some(c) = v.pointer("/usage/cost").and_then(|x| x.as_f64()) {
                             cost = Some(c);
                         }
@@ -135,12 +142,25 @@ async fn run_one(
                                 }
                             }
                         }
+                        // Reasoning-Modelle senden erst Denk-Tokens; das erste
+                        // non-leere Delta (Content ODER Reasoning) zählt als TTFT.
+                        if ttft_ms.is_none() {
+                            if let Some(r) = v.pointer("/choices/0/delta/reasoning").and_then(|x| x.as_str()) {
+                                if !r.is_empty() {
+                                    ttft_ms = Some(started.elapsed().as_millis() as u64);
+                                }
+                            }
+                        }
                     }
                 }
                 chunks += 1;
-                // Nach dem ersten Token nur noch begrenzt mitlesen (Messung, kein Chat).
-                if ttft_ms.is_some() && chunks >= 40 {
-                    break;
+                // Nach dem ersten Token weiterlesen, bis Usage (Tokens/Kosten) da ist —
+                // aber höchstens 10 s, damit der Benchmark nicht endlos läuft.
+                if ttft_ms.is_some() {
+                    let usage_seen = cost.is_some() || tokens_out > 0;
+                    if started.elapsed().as_secs() >= 10 || (usage_seen && chunks >= 20) {
+                        break;
+                    }
                 }
             }
             Some(Err(e)) => {
@@ -154,6 +174,7 @@ async fn run_one(
         }
     }
     let total_ms = started.elapsed().as_millis() as u64;
+    tracing::info!(model_id, %parsed_events, %chunks, ttft = ?ttft_ms, %total_ms, "benchmark run done");
     if tokens_out == 0 && chars > 0 {
         tokens_out = (chars / 4).max(1) as u64; // grobe Schätzung ohne Tokenizer
     }
