@@ -74,7 +74,7 @@ final class AppState: ObservableObject {
         return nil
     }
 
-    var bindAddress: String { config?.server.bind ?? "127.0.0.1:4000" }
+    var bindAddress: String { config?.server.bind ?? "127.0.0.1:4123" }
 
     // MARK: - Config load / save
 

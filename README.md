@@ -4,11 +4,12 @@ A local proxy that speaks the OpenAI and Anthropic APIs and routes every request
 
 **What it does**
 
-- One endpoint for every model: point any OpenAI **or** Anthropic client at `http://127.0.0.1:4000` and send `"model": "auto"`.
+- One endpoint for every model: point any OpenAI **or** Anthropic client at `http://127.0.0.1:4123` and send `"model": "auto"`.
 - Picks the model per request from a weighted score over **cost, latency, context headroom, preference, and quality** — deterministic, same input → same choice.
 - Per-request steering via a `x-route-profile` header (six built-in profiles) or a `privacy_tag` for "keep this local / ZDR-only".
 - Falls back down the ranked list on upstream errors, streams SSE straight back to the caller.
 - A native **[macOS menu-bar admin app](#admin-app-macos)** to edit the whole config and start/stop the router.
+- A **[web interface](#web-interface)** at `http://127.0.0.1:4123` — chat playground, sortable model catalog, routing explain dry-run, usage dashboard and live loguru-style logs.
 
 **Backends**: pluggable via the `Provider` trait. Built in:
 
@@ -21,13 +22,13 @@ Any number of named backend instances can run at once; see [Configuration](#conf
 ## Get started
 
 ```bash
-git clone https://github.com/deponere/router.git
+git clone https://github.com/deponere/llm-router.git
 cd router
 cp .env.example .env          # set OPENROUTER_API_KEY
 cargo run -p router-api --release
 ```
 
-Then point any OpenAI or Anthropic client at `http://127.0.0.1:4000`. See [Quick start](#quick-start) for a full request example.
+Then point any OpenAI or Anthropic client at `http://127.0.0.1:4123`. See [Quick start](#quick-start) for a full request example.
 
 ## Learn more
 
@@ -40,7 +41,7 @@ Then point any OpenAI or Anthropic client at `http://127.0.0.1:4000`. See [Quick
 
 ## Reporting bugs
 
-Open an issue on [github.com/deponere/router/issues](https://github.com/deponere/router/issues) with the request payload, the `x-route-profile` you used, and the log output from `RUST_LOG=router_core=debug`.
+Open an issue on [github.com/deponere/llm-router/issues](https://github.com/deponere/llm-router/issues) with the request payload, the `x-route-profile` you used, and the log output from `RUST_LOG=router_core=debug`.
 
 ---
 
@@ -83,9 +84,9 @@ cp .env.example .env
 cargo run -p router-api
 
 # in another terminal:
-curl -s http://127.0.0.1:4000/v1/models | jq '.data | length'
+curl -s http://127.0.0.1:4123/v1/models | jq '.data | length'
 
-curl -sN http://127.0.0.1:4000/v1/chat/completions \
+curl -sN http://127.0.0.1:4123/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -H 'x-route-profile: cheap' \
   -d '{"model":"auto","stream":true,"messages":[{"role":"user","content":"hi"}]}'
@@ -189,7 +190,11 @@ Accepts the full Anthropic request format including `thinking`, tool use blocks,
 ### Observability
 
 ```
-GET  /v1/transactions?limit=N         recent calls + session/today totals
+GET  /                          web interface (chat playground, model catalog, routing explain, usage, logs)
+GET  /v1/transactions?limit=N   recent calls + session/today totals
+GET  /v1/logs?limit=N           last log entries (in-memory ring buffer, loguru-structured)
+POST /v1/logs/clear             clear the log ring buffer
+POST /v1/admin/restart          restart the router process (same binary/args, new session; poll /healthz after)
 ```
 
 Returns an in-memory ring buffer (last 100 calls) with per-call `duration_ms`, `tokens_out` and `cost_usd`, plus `totals_session` / `totals_today_utc` aggregates carrying `count`, `tokens_out` and `tokens_per_sec` (output tokens ÷ summed call duration). The [admin app](#admin-app-macos)'s **Log** tab renders this.
@@ -292,6 +297,19 @@ See [`macos-admin/README.md`](./macos-admin/README.md) for the architecture and 
 
 ---
 
+## Web interface
+
+A LightLLM-style single-file web UI, embedded in the router (no build step, no extra dependencies) at **`http://127.0.0.1:4123/`** (also `/ui`). It speaks the router's own JSON endpoints.
+
+- **Chat** — playground with profile/model controls (system prompt, temperature, max tokens) and SSE streaming; every answer shows the routed model, tokens and cost, plus a collapsible routing trace (winner, ranking, rejected candidates).
+- **Models** — the full registry: context, in/out pricing, measured p95, AA Intelligence Index, modalities, capabilities, privacy class — sortable by column, filterable live.
+- **Explain** — dry-run of the expert system on any request body: winner, active weights, scored ranking and every rejected candidate with its reason.
+- **Usage** — session/today KPIs (calls, output tokens, tokens/s, cost) and the last 50 calls from `/v1/transactions`.
+- **Logs** — live view of the router's in-memory log buffer (last 500 entries, polled every 1.5 s), rendered loguru-style: `ts | LEVEL | target:line - message` with level colors, level filter, search, pause, clear and copy-as-text.
+- **Restart** — `🔄 Neu starten` in the header calls `POST /v1/admin/restart` and reloads once the router is back.
+
+---
+
 ## Environment variables
 
 | Variable | Required | Default | Description |
@@ -304,6 +322,26 @@ See [`macos-admin/README.md`](./macos-admin/README.md) for the architecture and 
 | `RUST_LOG` | no | `info` | tracing filter (e.g. `router_core=debug`) |
 
 Env vars are loaded from `.env` (via `dotenvy`) at the working directory.
+
+---
+
+## OpenRouter key rotation
+
+The router rotates the OpenRouter inference key **automatically, in-process** — no cron, no external scheduler. On every request (`/v1/chat/completions`, `/v1/messages`, `/v1/models`) it checks — throttled to a real check every 30 s — whether the process has been running longer than `OPENROUTER_ROTATE_DAYS` **or** the current key is older than that (tracked via `OPENROUTER_LAST_ROTATION` in `.env`; an unset entry counts as stale). When due, it creates a new key via the [Management API Keys](https://openrouter.ai/docs/guides/overview/auth/management-api-keys) API, verifies it, activates it (process env + `.env`), then deletes the previous key. One rotation at a time; failures are logged and retried on the next check — requests are never blocked.
+
+**Setup (one-time):**
+
+1. Create a Management API key: openrouter.ai → *Management API Keys* → *Create New Key*. It cannot make inference calls — admin only.
+2. Store it in the macOS Keychain: `./scripts/store-key.sh` (reads the key via `read -s`; it never lands in shell history or a file).
+3. Configure in `.env` (template in [.env.example](./.env.example)):
+   - `OPENROUTER_LIMIT` — USD limit per key (without it the key is created unlimited)
+   - `OPENROUTER_LIMIT_RESET` — `daily` | `weekly` | `monthly` budget reset (best-effort)
+   - `OPENROUTER_ROTATE_DAYS` — rotation interval (default 10)
+   - `OPENROUTER_MGMT_KEY_SERVICE` — keychain service name (default `openrouter-management-key`)
+
+The new key string is only ever written into `.env`, never logged. The router reads `.env` at startup, so the rotation state (`OPENROUTER_LAST_ROTATION`, `OPENROUTER_KEY_HASH`) survives restarts.
+
+`scripts/rotate-openrouter-key.sh` remains as an optional manual tool (`--force` / `--status` / `--dry-run`) if you ever want to rotate ahead of schedule.
 
 ---
 
@@ -364,6 +402,8 @@ A Cargo workspace ([layout above](#workspace-layout)) plus a Swift package under
 - **Quality scoring** — Artificial Analysis Intelligence Index as a fifth score term (`weights.quality`) + `min_intelligence_index` hard filter.
 - **Fallback cascade** — on an upstream 4xx/5xx the router walks down the ranked candidates instead of returning the error.
 - **macOS admin app** + `router-admin` comment-preserving config bridge.
+- **Web interface** — chat playground with SSE streaming, sortable model catalog, routing explain dry-run, usage dashboard and live loguru-style logs (`GET /`).
+- **Automatic key rotation** — in-process OpenRouter key rotation via the Management API (macOS Keychain-stored management key, `OPENROUTER_LIMIT`/`OPENROUTER_ROTATE_DAYS` in `.env`), plus `POST /v1/admin/restart` and `GET /v1/logs`.
 - API fixes — spec-compliant Anthropic stream close, honour `stream: false`, aggregate `tool_calls`/usage; case-insensitive oMLX override matching; `:free` denied by default.
 - Dependency + lint cleanup (dropped `tiktoken-rs`, `async-trait` where unused, `tower`, `tokio-stream`); removed the old xbar widget in favour of the admin app.
 
