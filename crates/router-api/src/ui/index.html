@@ -98,28 +98,28 @@
 <header>
   <h1>LLM <span>Router</span></h1>
   <nav id="nav">
-    <button data-tab="chat" class="active" data-i18n="nav.chat">💬 Chat</button>
-    <button data-tab="models" data-i18n="nav.models">📦 Models</button>
-    <button data-tab="explain" data-i18n="nav.explain">🧭 Explain</button>
-    <button data-tab="usage" data-i18n="nav.usage">📊 Usage</button>
-    <button data-tab="logs" data-i18n="nav.logs">📜 Logs</button>
-    <button data-tab="settings" data-i18n="nav.settings">⚙️ Settings</button>
+    <button data-tab="chat" class="active" data-i18n="nav.chat">Chat</button>
+    <button data-tab="models" data-i18n="nav.models">Models</button>
+    <button data-tab="explain" data-i18n="nav.explain">Explain</button>
+    <button data-tab="usage" data-i18n="nav.usage">Usage</button>
+    <button data-tab="logs" data-i18n="nav.logs">Logs</button>
+    <button data-tab="settings" data-i18n="nav.settings">Settings</button>
   </nav>
   <div class="status">
     <span><span id="dot" class="dot"></span> <span id="apiStatus" data-i18n="status.checking">checking…</span></span>
     <span id="modelCount"></span>
     <select id="langSel" style="width:auto" data-i18n-title="lang.title">
-      <option value="en">🇬🇧 English</option>
-      <option value="de">🇩🇪 Deutsch</option>
-      <option value="es">🇪🇸 Español</option>
-      <option value="fr">🇫🇷 Français</option>
+      <option value="en">English</option>
+      <option value="de">Deutsch</option>
+      <option value="es">Español</option>
+      <option value="fr">Français</option>
     </select>
     <select id="themeSel" style="width:auto" data-i18n-title="theme.title">
-      <option value="dark" data-i18n="theme.dark">🌙 Dark</option>
-      <option value="light" data-i18n="theme.light">☀️ Light</option>
-      <option value="system" data-i18n="theme.system">🖥 System</option>
+      <option value="dark" data-i18n="theme.dark">Dark</option>
+      <option value="light" data-i18n="theme.light">Light</option>
+      <option value="system" data-i18n="theme.system">System</option>
     </select>
-    <button class="ghost" id="restartBtn" data-i18n="restart.btn">🔄 Restart</button>
+    <button class="ghost" id="restartBtn" data-i18n="restart.btn">Restart</button>
   </div>
 </header>
 
@@ -229,7 +229,7 @@
         <div style="flex:1; min-width:140px"><label data-i18n="settings.keyName">Name</label><input type="text" id="newKeyName" placeholder="pi"></div>
         <div style="width:110px"><label data-i18n="settings.keyDaily">Daily $</label><input type="number" id="newKeyDaily" min="0" step="0.5" placeholder="—"></div>
         <div style="width:120px"><label data-i18n="settings.keyMonthly">Monthly $</label><input type="number" id="newKeyMonthly" min="0" step="5" placeholder="—"></div>
-        <button class="ghost" id="newKeyBtn" data-i18n="settings.createKey">＋ Create key</button>
+        <button class="ghost" id="newKeyBtn" data-i18n="settings.createKey">Create key</button>
       </div>
       <div id="newKeyOut" style="margin-top:10px"></div>
       <div class="hint" id="authHint"></div>
@@ -260,7 +260,7 @@
       </div>
       <div style="display:flex; gap:10px; margin-top:14px">
         <button class="primary" id="saveCfgBtn" data-i18n="settings.save">Save &amp; restart</button>
-        <button class="ghost" id="testAlertBtn" data-i18n="settings.testAlert">🔔 Test alert</button>
+        <button class="ghost" id="testAlertBtn" data-i18n="settings.testAlert">Test alert</button>
       </div>
       <div class="error" id="cfgErr"></div>
     </div>
@@ -329,9 +329,9 @@
           <option value="ERROR">ERROR</option>
         </select>
         <input type="text" id="logSearch" data-i18n-placeholder="logs.search" placeholder="Filter…" style="width:200px">
-        <button class="ghost" id="logPause" data-i18n="logs.pause">⏸ Pause</button>
-        <button class="ghost" id="logClear" data-i18n="logs.clear">🗑 Clear</button>
-        <button class="ghost" id="logCopy" data-i18n="logs.copy">📋 Copy</button>
+        <button class="ghost" id="logPause" data-i18n="logs.pause">Pause</button>
+        <button class="ghost" id="logClear" data-i18n="logs.clear">Clear</button>
+        <button class="ghost" id="logCopy" data-i18n="logs.copy">Copy</button>
       </div>
       <div id="logBox" style="background:var(--log-bg); border:1px solid var(--border); border-radius:8px; padding:12px 14px; overflow:auto; max-height:70vh; font-family:var(--mono); font-size:12px; line-height:1.7; white-space:pre-wrap"></div>
       <div class="hint" id="logHint"></div>
@@ -348,10 +348,10 @@ const $ = s => document.querySelector(s);
 const I18N = {
 en: {
   "app.title": "LLM Router · Web UI",
-  "nav.chat": "💬 Chat", "nav.models": "📦 Models", "nav.explain": "🧭 Explain", "nav.usage": "📊 Usage", "nav.logs": "📜 Logs",
+  "nav.chat": "Chat", "nav.models": "Models", "nav.explain": "Explain", "nav.usage": "Usage", "nav.logs": "Logs",
   "status.checking": "checking…", "status.online": "online", "status.offline": "offline",
   "lang.title": "Language",
-  "theme.title": "Color scheme", "theme.dark": "🌙 Dark", "theme.light": "☀️ Light", "theme.system": "🖥 System",
+  "theme.title": "Color scheme", "theme.dark": "Dark", "theme.light": "Light", "theme.system": "System",
   "chat.settings": "Settings", "chat.profile": "Route profile", "chat.model": "Model (empty = auto)", "chat.system": "System prompt",
   "chat.sysDefault": "You are a helpful assistant.", "chat.temperature": "Temperature", "chat.maxTokens": "Max tokens (empty = model default)",
   "chat.send": "Send", "chat.conversation": "Conversation", "chat.placeholder": "Type a message…",
@@ -377,12 +377,12 @@ en: {
   "usage.calls": "Calls", "usage.tokensOut": "Output tokens", "usage.tps": "tok/s", "usage.cost": "Cost",
   "usage.loading": "Loading…", "usage.empty": "No calls in this session yet.",
   "logs.title": "Logs", "logs.level": "Level", "logs.search": "Filter…",
-  "logs.pause": "⏸ Pause", "logs.resume": "▶ Resume", "logs.clear": "🗑 Clear", "logs.copy": "📋 Copy", "logs.copied": "✓ Copied",
+  "logs.pause": "Pause", "logs.resume": "Resume", "logs.clear": "Clear", "logs.copy": "Copy", "logs.copied": "Copied",
   "logs.empty": "(no entries for this filter)", "logs.entries": "entries", "logs.filtered": "filtered",
   "logs.hint": "Live polling (1.5 s) · in-memory ring buffer (last 500 entries) · loguru format: <code>ts | LEVEL | target:line - message</code>",
-  "restart.btn": "🔄 Restart", "restart.confirm": "Really restart the router? Brief interruption (~2 s).",
-  "restart.restarting": "⏳ Restarting…", "restart.timeout": "Router not responding — reload the page?",
-  "nav.settings": "⚙️ Settings",
+  "restart.btn": "Restart", "restart.confirm": "Really restart the router? Brief interruption (~2 s).",
+  "restart.restarting": "Restarting…", "restart.timeout": "Router not responding — reload the page?",
+  "nav.settings": "Settings",
   "usage.history": "History", "usage.days": "Days", "usage.breakdown": "Breakdown", "usage.by": "Group by",
   "usage.key": "API key", "usage.bdGroup": "Group", "usage.noData": "no data yet",
   "benchmark.title": "Benchmark (live calls)", "benchmark.run": "Benchmark top 3",
@@ -391,24 +391,24 @@ en: {
   "benchmark.colTokens": "Tok out", "benchmark.colCost": "Cost", "benchmark.colFirst": "First chunk", "benchmark.error": "Error",
   "settings.auth": "API keys & budgets", "settings.authEnabled": "Protect LLM endpoints (x-api-key)",
   "settings.allowUi": "Web UI stays key-less", "settings.keyName": "Name", "settings.keyHash": "Hash",
-  "settings.keyDaily": "Daily $", "settings.keyMonthly": "Monthly $", "settings.createKey": "＋ Create key",
+  "settings.keyDaily": "Daily $", "settings.keyMonthly": "Monthly $", "settings.createKey": "Create key",
   "settings.keyCreated": "Key created — copy it now, shown only once:", "settings.restartHint": "Restart required for auth changes.",
-  "settings.remove": "🗑", "settings.noKeys": "No keys configured.",
+  "settings.remove": "Delete", "settings.noKeys": "No keys configured.",
   "settings.storage": "Storage", "settings.dbPath": "SQLite path (relative = config dir)",
   "settings.retentionDays": "Retention (days, 0 = keep all)",
   "settings.alerts": "Alerts", "settings.webhookUrl": "Webhook URL", "settings.tgTokenEnv": "Telegram bot token env var",
   "settings.tgChatId": "Telegram chat ID", "settings.costThreshold": "Daily cost threshold USD (0 = off)",
   "settings.rotationFailed": "Rotation failed", "settings.rotationSucceeded": "Rotation ok",
   "settings.backendDown": "Backend down", "settings.balanceLow": "Balance low", "settings.costThresholdEvent": "Cost threshold",
-  "settings.save": "Save & restart", "settings.testAlert": "🔔 Test alert", "settings.saved": "Saved — restarting…",
+  "settings.save": "Save & restart", "settings.testAlert": "Test alert", "settings.saved": "Saved — restarting…",
   "settings.alertSent": "Test alert triggered."
 },
 de: {
   "app.title": "LLM Router · Web-Interface",
-  "nav.chat": "💬 Chat", "nav.models": "📦 Modelle", "nav.explain": "🧭 Erklärung", "nav.usage": "📊 Nutzung", "nav.logs": "📜 Logs",
+  "nav.chat": "Chat", "nav.models": "Modelle", "nav.explain": "Erklärung", "nav.usage": "Nutzung", "nav.logs": "Logs",
   "status.checking": "prüfe…", "status.online": "online", "status.offline": "offline",
   "lang.title": "Sprache",
-  "theme.title": "Farbschema", "theme.dark": "🌙 Dunkel", "theme.light": "☀️ Hell", "theme.system": "🖥 System",
+  "theme.title": "Farbschema", "theme.dark": "Dunkel", "theme.light": "Hell", "theme.system": "System",
   "chat.settings": "Einstellungen", "chat.profile": "Route-Profil", "chat.model": "Modell (leer = auto)", "chat.system": "System-Prompt",
   "chat.sysDefault": "Du bist ein hilfreicher Assistent.", "chat.temperature": "Temperature", "chat.maxTokens": "Max Tokens (leer = Modell-Default)",
   "chat.send": "Senden", "chat.conversation": "Konversation", "chat.placeholder": "Nachricht eingeben…",
@@ -434,12 +434,12 @@ de: {
   "usage.calls": "Aufrufe", "usage.tokensOut": "Output-Tokens", "usage.tps": "tok/s", "usage.cost": "Kosten",
   "usage.loading": "Lade…", "usage.empty": "Noch keine Aufrufe in dieser Session.",
   "logs.title": "Logs", "logs.level": "Level", "logs.search": "Filtern…",
-  "logs.pause": "⏸ Pause", "logs.resume": "▶ Weiter", "logs.clear": "🗑 Leeren", "logs.copy": "📋 Kopieren", "logs.copied": "✓ Kopiert",
+  "logs.pause": "Pause", "logs.resume": "Weiter", "logs.clear": "Leeren", "logs.copy": "Kopieren", "logs.copied": "Kopiert",
   "logs.empty": "(keine Einträge für diesen Filter)", "logs.entries": "Einträge", "logs.filtered": "gefiltert",
   "logs.hint": "Live-Polling (1,5 s) · In-Memory-Ringbuffer (letzte 500 Einträge) · Format wie loguru: <code>ts | LEVEL | target:line - message</code>",
-  "restart.btn": "🔄 Neu starten", "restart.confirm": "Router wirklich neu starten? Kurze Unterbrechung (~2 s).",
-  "restart.restarting": "⏳ Neustart…", "restart.timeout": "Router antwortet nicht — Seite neu laden?",
-  "nav.settings": "⚙️ Einstellungen",
+  "restart.btn": "Neu starten", "restart.confirm": "Router wirklich neu starten? Kurze Unterbrechung (~2 s).",
+  "restart.restarting": "Neustart…", "restart.timeout": "Router antwortet nicht — Seite neu laden?",
+  "nav.settings": "Einstellungen",
   "usage.history": "Verlauf", "usage.days": "Tage", "usage.breakdown": "Aufschlüsselung", "usage.by": "Gruppieren nach",
   "usage.key": "API-Key", "usage.bdGroup": "Gruppe", "usage.noData": "noch keine Daten",
   "benchmark.title": "Benchmark (echte Aufrufe)", "benchmark.run": "Benchmark Top 3",
@@ -449,24 +449,24 @@ de: {
   "benchmark.colFirst": "Erster Chunk", "benchmark.error": "Fehler",
   "settings.auth": "API-Keys & Budgets", "settings.authEnabled": "LLM-Endpoints schützen (x-api-key)",
   "settings.allowUi": "Web-UI bleibt ohne Key", "settings.keyName": "Name", "settings.keyHash": "Hash",
-  "settings.keyDaily": "Tages-$", "settings.keyMonthly": "Monats-$", "settings.createKey": "＋ Key anlegen",
+  "settings.keyDaily": "Tages-$", "settings.keyMonthly": "Monats-$", "settings.createKey": "Key anlegen",
   "settings.keyCreated": "Key erstellt — jetzt kopieren, wird nur einmal angezeigt:", "settings.restartHint": "Neustart nötig für Auth-Änderungen.",
-  "settings.remove": "🗑", "settings.noKeys": "Keine Keys konfiguriert.",
+  "settings.remove": "Löschen", "settings.noKeys": "Keine Keys konfiguriert.",
   "settings.storage": "Speicher", "settings.dbPath": "SQLite-Pfad (relativ = Config-Verzeichnis)",
   "settings.retentionDays": "Aufbewahrung (Tage, 0 = alles behalten)",
   "settings.alerts": "Alerts", "settings.webhookUrl": "Webhook-URL", "settings.tgTokenEnv": "Telegram-Bot-Token-Env-Var",
   "settings.tgChatId": "Telegram-Chat-ID", "settings.costThreshold": "Tageskosten-Schwelle USD (0 = aus)",
   "settings.rotationFailed": "Rotation fehlgeschlagen", "settings.rotationSucceeded": "Rotation ok",
   "settings.backendDown": "Backend down", "settings.balanceLow": "Balance niedrig", "settings.costThresholdEvent": "Kosten-Schwelle",
-  "settings.save": "Speichern & neu starten", "settings.testAlert": "🔔 Test-Alert", "settings.saved": "Gespeichert — Neustart…",
+  "settings.save": "Speichern & neu starten", "settings.testAlert": "Test-Alert", "settings.saved": "Gespeichert — Neustart…",
   "settings.alertSent": "Test-Alert ausgelöst."
 },
 es: {
   "app.title": "LLM Router · Interfaz web",
-  "nav.chat": "💬 Chat", "nav.models": "📦 Modelos", "nav.explain": "🧭 Explicación", "nav.usage": "📊 Uso", "nav.logs": "📜 Registros",
+  "nav.chat": "Chat", "nav.models": "Modelos", "nav.explain": "Explicación", "nav.usage": "Uso", "nav.logs": "Registros",
   "status.checking": "comprobando…", "status.online": "en línea", "status.offline": "sin conexión",
   "lang.title": "Idioma",
-  "theme.title": "Esquema de color", "theme.dark": "🌙 Oscuro", "theme.light": "☀️ Claro", "theme.system": "🖥 Sistema",
+  "theme.title": "Esquema de color", "theme.dark": "Oscuro", "theme.light": "Claro", "theme.system": "Sistema",
   "chat.settings": "Ajustes", "chat.profile": "Perfil de ruta", "chat.model": "Modelo (vacío = auto)", "chat.system": "Prompt del sistema",
   "chat.sysDefault": "Eres un asistente útil.", "chat.temperature": "Temperatura", "chat.maxTokens": "Máx. tokens (vacío = predeterminado)",
   "chat.send": "Enviar", "chat.conversation": "Conversación", "chat.placeholder": "Escribe un mensaje…",
@@ -492,12 +492,12 @@ es: {
   "usage.calls": "Llamadas", "usage.tokensOut": "Tokens de salida", "usage.tps": "tok/s", "usage.cost": "Coste",
   "usage.loading": "Cargando…", "usage.empty": "Aún no hay llamadas en esta sesión.",
   "logs.title": "Registros", "logs.level": "Nivel", "logs.search": "Filtrar…",
-  "logs.pause": "⏸ Pausa", "logs.resume": "▶ Continuar", "logs.clear": "🗑 Vaciar", "logs.copy": "📋 Copiar", "logs.copied": "✓ Copiado",
+  "logs.pause": "Pausa", "logs.resume": "Continuar", "logs.clear": "Vaciar", "logs.copy": "Copiar", "logs.copied": "Copiado",
   "logs.empty": "(sin entradas para este filtro)", "logs.entries": "entradas", "logs.filtered": "filtradas",
   "logs.hint": "Sondeo en vivo (1,5 s) · búfer circular en memoria (últimas 500 entradas) · formato loguru: <code>ts | LEVEL | target:line - mensaje</code>",
-  "restart.btn": "🔄 Reiniciar", "restart.confirm": "¿Reiniciar el router? Breve interrupción (~2 s).",
-  "restart.restarting": "⏳ Reiniciando…", "restart.timeout": "El router no responde: ¿recargar la página?",
-  "nav.settings": "⚙️ Ajustes",
+  "restart.btn": "Reiniciar", "restart.confirm": "¿Reiniciar el router? Breve interrupción (~2 s).",
+  "restart.restarting": "Reiniciando…", "restart.timeout": "El router no responde: ¿recargar la página?",
+  "nav.settings": "Ajustes",
   "usage.history": "Historial", "usage.days": "Días", "usage.breakdown": "Desglose", "usage.by": "Agrupar por",
   "usage.key": "Clave API", "usage.bdGroup": "Grupo", "usage.noData": "sin datos todavía",
   "benchmark.title": "Benchmark (llamadas reales)", "benchmark.run": "Evaluar top 3",
@@ -507,24 +507,24 @@ es: {
   "benchmark.colFirst": "Primer fragmento", "benchmark.error": "Error",
   "settings.auth": "Claves API y presupuestos", "settings.authEnabled": "Proteger endpoints LLM (x-api-key)",
   "settings.allowUi": "Web UI sin clave", "settings.keyName": "Nombre", "settings.keyHash": "Hash",
-  "settings.keyDaily": "$/día", "settings.keyMonthly": "$/mes", "settings.createKey": "＋ Crear clave",
+  "settings.keyDaily": "$/día", "settings.keyMonthly": "$/mes", "settings.createKey": "Crear clave",
   "settings.keyCreated": "Clave creada — cópiala ahora, solo se muestra una vez:", "settings.restartHint": "Reinicio necesario para cambios de auth.",
-  "settings.remove": "🗑", "settings.noKeys": "Sin claves configuradas.",
+  "settings.remove": "Eliminar", "settings.noKeys": "Sin claves configuradas.",
   "settings.storage": "Almacenamiento", "settings.dbPath": "Ruta SQLite (relativa = dir. de config)",
   "settings.retentionDays": "Retención (días, 0 = conservar todo)",
   "settings.alerts": "Alertas", "settings.webhookUrl": "URL webhook", "settings.tgTokenEnv": "Var. de entorno token bot Telegram",
   "settings.tgChatId": "ID de chat Telegram", "settings.costThreshold": "Umbral de coste diario USD (0 = off)",
   "settings.rotationFailed": "Rotación fallida", "settings.rotationSucceeded": "Rotación ok",
   "settings.backendDown": "Backend caído", "settings.balanceLow": "Saldo bajo", "settings.costThresholdEvent": "Umbral de coste",
-  "settings.save": "Guardar y reiniciar", "settings.testAlert": "🔔 Alertar de prueba", "settings.saved": "Guardado — reiniciando…",
+  "settings.save": "Guardar y reiniciar", "settings.testAlert": "Alertar de prueba", "settings.saved": "Guardado — reiniciando…",
   "settings.alertSent": "Alerta de prueba enviada."
 },
 fr: {
   "app.title": "LLM Router · Interface web",
-  "nav.chat": "💬 Chat", "nav.models": "📦 Modèles", "nav.explain": "🧭 Explication", "nav.usage": "📊 Utilisation", "nav.logs": "📜 Journaux",
+  "nav.chat": "Chat", "nav.models": "Modèles", "nav.explain": "Explication", "nav.usage": "Utilisation", "nav.logs": "Journaux",
   "status.checking": "vérification…", "status.online": "en ligne", "status.offline": "hors ligne",
   "lang.title": "Langue",
-  "theme.title": "Schéma de couleurs", "theme.dark": "🌙 Sombre", "theme.light": "☀️ Clair", "theme.system": "🖥 Système",
+  "theme.title": "Schéma de couleurs", "theme.dark": "Sombre", "theme.light": "Clair", "theme.system": "Système",
   "chat.settings": "Paramètres", "chat.profile": "Profil de routage", "chat.model": "Modèle (vide = auto)", "chat.system": "Prompt système",
   "chat.sysDefault": "Vous êtes un assistant utile.", "chat.temperature": "Température", "chat.maxTokens": "Max tokens (vide = défaut)",
   "chat.send": "Envoyer", "chat.conversation": "Conversation", "chat.placeholder": "Saisissez un message…",
@@ -550,12 +550,12 @@ fr: {
   "usage.calls": "Appels", "usage.tokensOut": "Tokens de sortie", "usage.tps": "tok/s", "usage.cost": "Coût",
   "usage.loading": "Chargement…", "usage.empty": "Aucun appel dans cette session pour l'instant.",
   "logs.title": "Journaux", "logs.level": "Niveau", "logs.search": "Filtrer…",
-  "logs.pause": "⏸ Pause", "logs.resume": "▶ Reprendre", "logs.clear": "🗑 Vider", "logs.copy": "📋 Copier", "logs.copied": "✓ Copié",
+  "logs.pause": "Pause", "logs.resume": "Reprendre", "logs.clear": "Vider", "logs.copy": "Copier", "logs.copied": "Copié",
   "logs.empty": "(aucune entrée pour ce filtre)", "logs.entries": "entrées", "logs.filtered": "filtrées",
   "logs.hint": "Sondage en direct (1,5 s) · tampon circulaire en mémoire (500 dernières entrées) · format loguru : <code>ts | LEVEL | target:line - message</code>",
-  "restart.btn": "🔄 Redémarrer", "restart.confirm": "Redémarrer le routeur ? Brève interruption (~2 s).",
-  "restart.restarting": "⏳ Redémarrage…", "restart.timeout": "Le routeur ne répond pas — recharger la page ?",
-  "nav.settings": "⚙️ Paramètres",
+  "restart.btn": "Redémarrer", "restart.confirm": "Redémarrer le routeur ? Brève interruption (~2 s).",
+  "restart.restarting": "Redémarrage…", "restart.timeout": "Le routeur ne répond pas — recharger la page ?",
+  "nav.settings": "Paramètres",
   "usage.history": "Historique", "usage.days": "Jours", "usage.breakdown": "Répartition", "usage.by": "Grouper par",
   "usage.key": "Clé API", "usage.bdGroup": "Groupe", "usage.noData": "pas encore de données",
   "benchmark.title": "Benchmark (appels réels)", "benchmark.run": "Comparer top 3",
@@ -565,16 +565,16 @@ fr: {
   "benchmark.colFirst": "Premier morceau", "benchmark.error": "Erreur",
   "settings.auth": "Clés API et budgets", "settings.authEnabled": "Protéger les endpoints LLM (x-api-key)",
   "settings.allowUi": "Web UI sans clé", "settings.keyName": "Nom", "settings.keyHash": "Hash",
-  "settings.keyDaily": "$/jour", "settings.keyMonthly": "$/mois", "settings.createKey": "＋ Créer une clé",
+  "settings.keyDaily": "$/jour", "settings.keyMonthly": "$/mois", "settings.createKey": "Créer une clé",
   "settings.keyCreated": "Clé créée — copiez-la maintenant, affichée une seule fois :", "settings.restartHint": "Redémarrage nécessaire pour les changements d'auth.",
-  "settings.remove": "🗑", "settings.noKeys": "Aucune clé configurée.",
+  "settings.remove": "Supprimer", "settings.noKeys": "Aucune clé configurée.",
   "settings.storage": "Stockage", "settings.dbPath": "Chemin SQLite (relatif = dossier de config)",
   "settings.retentionDays": "Conservation (jours, 0 = tout garder)",
   "settings.alerts": "Alertes", "settings.webhookUrl": "URL du webhook", "settings.tgTokenEnv": "Variable d'env. du token bot Telegram",
   "settings.tgChatId": "ID de chat Telegram", "settings.costThreshold": "Seuil de coût journalier USD (0 = off)",
   "settings.rotationFailed": "Rotation échouée", "settings.rotationSucceeded": "Rotation ok",
   "settings.backendDown": "Backend hors ligne", "settings.balanceLow": "Solde faible", "settings.costThresholdEvent": "Seuil de coût",
-  "settings.save": "Enregistrer et redémarrer", "settings.testAlert": "🔔 Alerte de test", "settings.saved": "Enregistré — redémarrage…",
+  "settings.save": "Enregistrer et redémarrer", "settings.testAlert": "Alerte de test", "settings.saved": "Enregistré — redémarrage…",
   "settings.alertSent": "Alerte de test déclenchée."
 },
 };
@@ -832,7 +832,7 @@ async function doSend() {
     history.push({ role: "assistant", content: acc });
     fetchExplainTrace();
   } catch (e) {
-    bubble.textContent = "⚠ " + t("chat.error") + ": " + e.message;
+    bubble.textContent = "" + t("chat.error") + ": " + e.message;
     history.pop();
     $("#chatErr").textContent = e.message;
   } finally {
@@ -1176,7 +1176,7 @@ $("#newKeyBtn").onclick = async () => {
     });
     $("#newKeyOut").innerHTML = `<div class="error" style="color:var(--warn)">${t("settings.keyCreated")}</div>
       <div style="font-family:var(--mono); background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px 10px; margin-top:6px; word-break:break-all">${esc(d.key)}</div>
-      <button class="ghost" style="margin-top:6px" onclick="navigator.clipboard.writeText('${esc(d.key)}')">📋 Copy</button>
+      <button class="ghost" style="margin-top:6px" onclick="navigator.clipboard.writeText('${esc(d.key)}')">Copy</button>
       <div class="hint">${t("settings.restartHint")}</div>`;
     $("#newKeyName").value = "";
     loadSettings();

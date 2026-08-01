@@ -1,0 +1,178 @@
+# LLM-Router Configuration — Docker-Variante (docker compose)
+# Start: docker compose up -d --build
+#
+# Unterschiede zur Host-Config (config/router.toml):
+#   - bind 0.0.0.0 (Container erreicht man über die Container-IP, nicht Loopback)
+#   - [backends.ollama] enabled → http://ollama:11434/v1 (Compose-Service-Name)
+#   - [backends.omlx] disabled (oMLX ist macOS-only; vom Container aus erreichbar
+#     über base_url = "http://host.docker.internal:8008/v1" — dann hier aktivieren)
+#   - [profiles.local] backend_allowlist = ["ollama"]
+# Alle Preise in USD pro 1 Million Tokens, Latenzen in Millisekunden.
+
+[server]
+bind = "0.0.0.0:4123"
+
+[backends.openrouter]
+enabled = true
+kind = "openrouter"
+base_url = "https://openrouter.ai/api/v1"
+auth = { type = "api_key", env = "OPENROUTER_API_KEY" }
+app_referer = "https://localhost/router"
+app_title = "deponere_router"
+local = false
+
+# --- Lokale Backends im Container ---
+
+[backends.omlx]
+enabled = false          # macOS-only; im Container via host.docker.internal erreichbar
+kind = "openai_compat"
+base_url = "http://host.docker.internal:8008/v1"
+auth = { type = "none" }
+local = true
+
+[backends.ollama]
+enabled = true           # Compose-Service "ollama" im selben Netzwerk
+kind = "openai_compat"
+base_url = "http://ollama:11434/v1"
+auth = { type = "none" }
+local = true
+
+[backends.lmstudio]
+enabled = false
+kind = "openai_compat"
+base_url = "http://host.docker.internal:1234/v1"
+auth = { type = "none" }
+local = true
+
+# --- Direkte Cloud-Provider ---
+# Alle disabled-by-default; aktivieren + passenden API-Key exportieren.
+
+[backends.openai]
+enabled = false
+kind = "openai_compat"
+base_url = "https://api.openai.com/v1"
+auth = { type = "api_key", env = "OPENAI_API_KEY" }
+local = false
+
+[backends.anthropic]
+enabled = false
+kind = "anthropic"
+base_url = "https://api.anthropic.com/v1"
+auth = { type = "api_key", env = "ANTHROPIC_API_KEY" }
+local = false
+
+[backends.gemini]
+enabled = false
+kind = "openai_compat"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+auth = { type = "api_key", env = "GEMINI_API_KEY" }
+local = false
+
+[backends.groq]
+enabled = false
+kind = "openai_compat"
+base_url = "https://api.groq.com/openai/v1"
+auth = { type = "api_key", env = "GROQ_API_KEY" }
+local = false
+
+[backends.deepseek]
+enabled = true
+kind = "openai_compat"
+base_url = "https://api.deepseek.com/v1"
+auth = { type = "api_key", env = "DEEPSEEK_API_KEY" }
+local = false
+
+[backends.xai]
+enabled = false
+kind = "openai_compat"
+base_url = "https://api.x.ai/v1"
+auth = { type = "api_key", env = "XAI_API_KEY" }
+local = false
+
+[backends.mistral]
+enabled = false
+kind = "openai_compat"
+base_url = "https://api.mistral.ai/v1"
+auth = { type = "api_key", env = "MISTRAL_API_KEY" }
+local = false
+
+# Capability-Overlays für lokale Modelle (Ollama liefert keine/leere Metadaten)
+[[registry.overrides]]
+backend = "ollama"
+id_prefix = "qwen3"
+input_modalities = ["text"]
+caps = ["tools"]
+
+[[registry.overrides]]
+backend = "ollama"
+id_prefix = "qwen2.5-coder"
+input_modalities = ["text"]
+caps = ["tools"]
+
+[[registry.overrides]]
+backend = "ollama"
+id_prefix = "llama3"
+input_modalities = ["text"]
+caps = ["tools"]
+
+[[registry.overrides]]
+backend = "ollama"
+id_prefix = "qwen2.5-vl"
+input_modalities = ["text", "image"]
+
+# Privacy-Klassifizierung pro OpenRouter-Provider-Slug
+[registry.privacy]
+zdr = ["anthropic", "openai", "google"]
+
+[registry.intelligence]
+enabled = true
+api_key_env = "AA_API_KEY"
+base_url = "https://artificialanalysis.ai/api/v2"
+ttl_seconds = 86400
+
+[registry.intelligence.aliases]
+"Qwen3.6-35B-A3B-bf16" = "qwen3-6-35b-a3b"
+"gemma-4-26B-A4B-it-MLX-8bit" = "gemma-4-26b-a4b"
+"gemma-4-e2b-it-4bit" = "gemma-4-e2b"
+"gpt-oss-20b-MXFP4-Q8" = "gpt-oss-20b"
+
+# ---------------- Profile ----------------
+
+[profiles.default]
+weights = { cost = 0.15, latency = 0.1, context = 0.1, preference = 0.55, quality = 0.1 }
+preferences = ["deepseek/deepseek-v4-pro"]
+model_denylist = ["*:free"]
+provider_require_parameters = false
+
+[profiles.cheap]
+weights = { cost = 0.9, latency = 0.05, context = 0.05, preference = 0, quality = 0 }
+max_price_out_per_mtok = 2.0
+provider_sort = "price"
+provider_require_parameters = true
+
+[profiles.fast]
+weights = { cost = 0.1, latency = 0.7, context = 0.1, preference = 0.1, quality = 0 }
+max_latency_p95_ms = 1500
+provider_sort = "latency"
+provider_require_parameters = true
+
+[profiles.private]
+weights = { cost = 0.2, latency = 0.2, context = 0.2, preference = 0.4, quality = 0 }
+require_privacy_class = ["Local", "Zdr"]
+provider_zdr = true
+provider_allow_fallbacks = false
+provider_data_collection = "deny"
+provider_require_parameters = true
+
+[profiles.smart]
+weights = { cost = 0, latency = 0.1, context = 0.2, preference = 0.2, quality = 0.5 }
+preferences = ["anthropic/claude-opus-4-7", "anthropic/claude-opus-4-6", "openai/gpt-5", "google/gemini-2.5-pro"]
+provider_require_parameters = true
+
+[profiles.local]
+weights = { cost = 0, latency = 0.5, context = 0.2, preference = 0.3, quality = 0 }
+backend_allowlist = ["ollama"]
+preferences = ["qwen2.5:0.5b", "llama3.2", "qwen3"]
+
+[auth]
+enabled = false

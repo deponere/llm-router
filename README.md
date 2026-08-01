@@ -235,8 +235,17 @@ docker compose up -d             # nach Config-Änderung in ./config/router.toml
 - **oMLX (lokale Modelle)**: oMLX gibt es nur für macOS — ein lokales
   `[backends.omlx]` im Container braucht `base_url = "http://host.docker.internal:8008/v1"`,
   dann erreicht der Container das oMLX auf dem Mac-Host.
+- **Ollama (Linux/macOS)**: `docker compose up` startet zusätzlich einen
+  `ollama`-Service; die Container-Config `config/router.docker.toml` aktiviert
+  `[backends.ollama]` (`http://ollama:11434/v1`) und das Profil `local` routet
+  darauf. Geladene Modelle steuerst du per `OLLAMA_MODELS` (kommagetrennt,
+  Default `qwen2.5:0.5b`); der Container lädt sie beim Start und hält sie via
+  `OLLAMA_KEEP_ALIVE=-1` geladen. Weitere Modelle: `docker compose exec ollama
+  ollama pull <modell>`. Hinweis: ohne GPU (z. B. OrbStack auf macOS) läuft die
+  Generierung CPU-gebunden und träge — auf Linux mit NVIDIA-GPU die
+  `deploy`-Sektion im compose einkommentieren, dann ist Ollama schnell.
 - **Healthcheck**: `HEALTHCHECK` prüft `/healthz` alle 30 s; `restart: unless-stopped`
-  zieht den Container bei Abstürzen wieder hoch. Der „🔄 Restart"-Button im Web-UI
+  zieht den Container bei Abstürzen wieder hoch. Der „Restart"-Button im Web-UI
   ersetzt den Prozess in-place (Container bleibt unverändert laufen).
 - Non-root (UID 10001); Port `4123:4123` ist im compose gemappt.
 

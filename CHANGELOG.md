@@ -4,6 +4,8 @@
 
 ### Added
 - **Docker-Deployment** — `Dockerfile` (Multi-Stage, rusqlite bundled, non-root, Healthcheck) + `docker-compose.yml` (Port 4123, `./config`-Volume, `env_file: .env`); Key-Rotation im Container über `OPENROUTER_MGMT_KEY` statt macOS-Keychain; oMLX via `host.docker.internal` erreichbar
+- **Ollama im Compose-Setup** — zweiter Service (`ollama/ollama`), `config/router.docker.toml` aktiviert das Ollama-Backend (Linux-tauglich, `local`-Profil → ollama), Modell-Pull + Warmup im Entrypoint, `OLLAMA_KEEP_ALIVE=-1`; NVIDIA-GPU-Passthrough auskommentiert enthalten
+- **UI: Emojis entfernt** — Navigation, Buttons, Theme-/Sprach-Selector und Logs-Aktionen sind emoji-frei („Chat", „Restart", „Dark/Light/System", „Delete", …)
 - **Router API keys + budgets** — `[server.auth]`: SHA-256-hashed `rk_…` keys (plaintext shown exactly once via CLI/Web), `x-api-key`/Bearer middleware on all LLM endpoints, per-key daily/monthly USD budgets enforced from SQLite spend; Web UI stays key-less via same-origin detection. `router-admin auth add|list|rm`, `POST /v1/admin/keys[+/remove]`
 - **Persistent usage history (SQLite)** — bundled rusqlite store mirroring every transaction (stream + non-stream, both APIs); `GET /v1/stats` (daily cost series) + `GET /v1/breakdown` (by backend/profile/model/key); retention purge on start; History chart + breakdown tables in the Usage tab
 - **Balance watchdog** — per-backend `watchdog = { enabled, min_balance, balance_currency, check_interval_secs }` polls `GET /user/balance` (DeepSeek format) in-process on every request (throttled); alerts on low balance
