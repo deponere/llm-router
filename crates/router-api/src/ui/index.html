@@ -92,6 +92,8 @@
   .pill.Local{ background:#1f6feb33; color:#79c0ff; } .pill.Zdr{ background:#3fb95022; color:#3fb950; } .pill.Standard{ background:#8b949e22; color:#8b949e; }
   [data-theme="light"] .pill.Local{ color:#0969da; } [data-theme="light"] .pill.Zdr{ color:#1a7f37; } [data-theme="light"] .pill.Standard{ color:#59636e; }
   .trace pre { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:10px; overflow:auto; max-height:300px; font-family:var(--mono); font-size:12px; white-space:pre-wrap; }
+  /* Explain-Ergebnis: eigenes, begrenztes Scroll-Fenster statt vollem Tab-Scroll */
+  #explainResult { max-height:45vh; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:10px; }
   .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
   .kpi { background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center; }
   .kpi .v { font-size:20px; font-weight:600; font-family:var(--mono); }
