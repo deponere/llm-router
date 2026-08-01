@@ -21,7 +21,10 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| "config/router.toml".to_string());
     tracing::info!(%cfg_path, "loading config");
     let config = Config::load(&cfg_path)?;
-    let bind: SocketAddr = config.server.bind.parse()?;
+    // `ROUTER_BIND` überschreibt server.bind (z. B. Docker: 0.0.0.0:4123)
+    let bind: SocketAddr = std::env::var("ROUTER_BIND")
+        .unwrap_or_else(|_| config.server.bind.clone())
+        .parse()?;
 
     let tracker = LatencyTracker::new();
     let registry = RegistryHandle::new(&config, tracker.clone());

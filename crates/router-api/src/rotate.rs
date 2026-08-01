@@ -271,8 +271,15 @@ impl Rotator {
         }
     }
 
-    /// Management-Key aus der macOS-Keychain (security CLI), nur bei fälliger Rotation.
+    /// Management-Key: macOS-Keychain (security CLI), im Container alternativ
+    /// `OPENROUTER_MGMT_KEY` env (z. B. Docker-Secret), nur bei fälliger Rotation.
     async fn keychain_mgmt(&self) -> Option<String> {
+        // Container-Fallback: kein Keychain-Zugriff unter Linux/Docker.
+        if let Ok(k) = std::env::var("OPENROUTER_MGMT_KEY") {
+            if !k.is_empty() {
+                return Some(k);
+            }
+        }
         let user = std::env::var("USER").unwrap_or_default();
         let out = tokio::process::Command::new("security")
             .args([

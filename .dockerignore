@@ -1,0 +1,14 @@
+# Build-Kontext: keine großen/secret-haltigen Artefakte ins Image
+target/
+.git/
+.env
+.env.*
+!.env.example
+config/data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.dockerignore
+Dockerfile
+docker-compose.yml
+scripts/

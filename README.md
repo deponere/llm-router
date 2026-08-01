@@ -210,9 +210,41 @@ Returns an in-memory ring buffer (last 100 calls) with per-call `duration_ms`, `
 
 ---
 
+## Docker / docker compose
+
+Der Router kann als Container laufen — `Dockerfile` (Multi-Stage, kompiliert SQLite
+via `rusqlite bundled` mit, kein System-SQLite nötig) + `docker-compose.yml`:
+
+```bash
+docker compose up -d --build     # baut + startet auf Port 4123
+docker compose logs -f router    # Logs (gleiches Format wie das Web-UI)
+docker compose down              # stoppt; ./config (Config + SQLite) bleibt erhalten
+docker compose up -d             # nach Config-Änderung in ./config/router.toml
+```
+
+**Container-Besonderheiten:**
+
+- **Config + Historie bleiben persistent**: `./config` wird nach `/config` gemountet;
+  `ROUTER_CONFIG=/config/router.toml` ist im Image gesetzt — die SQLite-Historie liegt
+  dann in `./config/data/` auf dem Host.
+- **Secrets**: `env_file: .env` reicht die Keys (`OPENROUTER_API_KEY`,
+  `DEEPSEEK_API_KEY`, …) durch; `.env` ist im `.dockerignore` (kommt nie ins Image).
+- **Key-Rotation**: Die macOS-Keychain existiert im Container nicht — stattdessen
+  `OPENROUTER_MGMT_KEY` als Environment/Secret setzen (z. B. Docker-Secret-Datei).
+  Ohne Management-Key loggt die Rotation nur eine Warnung und lässt den Request laufen.
+- **oMLX (lokale Modelle)**: oMLX gibt es nur für macOS — ein lokales
+  `[backends.omlx]` im Container braucht `base_url = "http://host.docker.internal:8008/v1"`,
+  dann erreicht der Container das oMLX auf dem Mac-Host.
+- **Healthcheck**: `HEALTHCHECK` prüft `/healthz` alle 30 s; `restart: unless-stopped`
+  zieht den Container bei Abstürzen wieder hoch. Der „🔄 Restart"-Button im Web-UI
+  ersetzt den Prozess in-place (Container bleibt unverändert laufen).
+- Non-root (UID 10001); Port `4123:4123` ist im compose gemappt.
+
 ## Configuration
 
-`config/router.toml` is the single source of truth. Set `ROUTER_CONFIG` env var to override the path. It ships fully commented; the [admin app](#admin-app-macos) edits it without clobbering those comments. No hot-reload — a restart re-reads it.
+`config/router.toml` is the single source of truth. Set `ROUTER_CONFIG` env var to override the path. It ships fully commented; the admin app (web settings tab / `router-admin`) edits it without clobbering those comments. No hot-reload — a restart re-reads it.
+
+### Environment
 
 ### Backends
 
@@ -334,6 +366,8 @@ A LightLLM-style single-file web UI, embedded in the router (no build step, no e
 | `OMLX_API_KEY` | no | — | oMLX auth token (if configured) |
 | `AA_API_KEY` | if `[registry.intelligence]` enabled | — | Artificial Analysis key for quality scores |
 | `ROUTER_CONFIG` | no | `config/router.toml` | path to config file |
+| `ROUTER_BIND` | no | from config `server.bind` | override listen address, e.g. `0.0.0.0:4123` in Docker |
+| `OPENROUTER_MGMT_KEY` | no | — | rotation management key (container/CI fallback; macOS uses the Keychain instead) |
 | `RUST_LOG` | no | `info` | tracing filter (e.g. `router_core=debug`) |
 
 Env vars are loaded from `.env` (via `dotenvy`) at the working directory.

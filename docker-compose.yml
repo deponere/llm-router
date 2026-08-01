@@ -1,0 +1,33 @@
+# LLM Router — docker compose
+# Start:  docker compose up -d --build
+# Logs:   docker compose logs -f router
+# Stop:   docker compose down
+#
+# Volumes: ./config → /config (router.toml + SQLite-Historie bleiben persistent)
+# Secrets: .env (OPENROUTER_API_KEY, DEEPSEEK_API_KEY, …) — nie in die Config
+# oMLX:    läuft nur auf macOS — für lokale Modelle im Container
+#          [backends.local] base_url auf http://host.docker.internal:8008 setzen
+# Rotation: im Container statt Keychain: OPENROUTER_MGMT_KEY env (siehe README)
+services:
+  router:
+    build: .
+    image: llm-router:local
+    container_name: llm-router
+    ports:
+      - "4123:4123"
+    env_file:
+      - .env
+    environment:
+      ROUTER_CONFIG: /config/router.toml
+      # Container erreicht man über die Container-IP — nicht auf Loopback binden
+      ROUTER_BIND: 0.0.0.0:4123
+      RUST_LOG: info,router_api=debug,router_core=debug,router_providers=debug
+    volumes:
+      - ./config:/config
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:4123/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
