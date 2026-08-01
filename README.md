@@ -301,6 +301,8 @@ See [`macos-admin/README.md`](./macos-admin/README.md) for the architecture and 
 
 A LightLLM-style single-file web UI, embedded in the router (no build step, no extra dependencies) at **`http://127.0.0.1:4123/`** (also `/ui`). It speaks the router's own JSON endpoints.
 
+![Web interface — chat playground, model catalog, routing explain, usage and live logs](docs/screenshot.png)
+
 - **Chat** — playground with profile/model controls (system prompt, temperature, max tokens) and SSE streaming; every answer shows the routed model, tokens and cost, plus a collapsible routing trace (winner, ranking, rejected candidates).
 - **Models** — the full registry: context, in/out pricing, measured p95, AA Intelligence Index, modalities, capabilities, privacy class — sortable by column, filterable live.
 - **Explain** — dry-run of the expert system on any request body: winner, active weights, scored ranking and every rejected candidate with its reason.
