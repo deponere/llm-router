@@ -5,6 +5,7 @@ pub mod routes;
 pub mod openai;
 pub mod anthropic;
 pub mod sse;
+pub mod alerts;
 pub mod auth;
 pub mod benchmark;
 pub mod configedit;

@@ -28,6 +28,8 @@ pub struct RegistryHandle {
     cache: Cache<&'static str, Arc<Registry>>,
     tracker: LatencyTracker,
     aa: ArtificialAnalysisClient,
+    /// backend_id → Unix-Sekunde des letzten Catalog-Fetch-Fehlers (für Alerts).
+    last_fetch_failure: Arc<std::sync::Mutex<std::collections::HashMap<String, u64>>>,
 }
 
 const CACHE_KEY: &str = "registry";
@@ -51,7 +53,18 @@ impl RegistryHandle {
             cache,
             tracker,
             aa,
+            last_fetch_failure: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         }
+    }
+
+    /// Backend-IDs mit Catalog-Fetch-Fehlern: (backend_id, Unix-Sekunde des Fehlers).
+    pub fn backend_fetch_failures(&self) -> Vec<(String, u64)> {
+        self.last_fetch_failure
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect()
     }
 
     /// Provider-Instanz für eine Backend-ID (Dispatch im Egress).
@@ -86,6 +99,11 @@ impl RegistryHandle {
                 Ok(mut list) => models.append(&mut list),
                 Err(e) => {
                     tracing::warn!(backend=%id, error=%e, "catalog fetch failed, continuing without");
+                    let ts = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    self.last_fetch_failure.lock().unwrap().insert(id.clone(), ts);
                 }
             }
         }

@@ -33,6 +33,7 @@ pub fn build(state: AppState) -> Router {
         .route("/v1/admin/keys", get(crate::debug::admin_keys))
         .route("/v1/admin/keys", post(crate::debug::admin_keys_create))
         .route("/v1/admin/keys/remove", post(crate::debug::admin_keys_remove))
+        .route("/v1/admin/alerts/test", post(crate::debug::admin_alerts_test))
         .route("/v1/admin/config", post(crate::debug::admin_config_set))
         .route(
             "/v1/chat/completions",

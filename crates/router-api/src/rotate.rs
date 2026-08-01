@@ -97,6 +97,8 @@ struct RotatorInner {
     last_real_check: Mutex<Instant>,
     rotating: AtomicBool,
     http: reqwest::Client,
+    /// backend_id → letzter Balance-Check (Watchdog-Intervall).
+    balance_last_check: Mutex<std::collections::HashMap<String, Instant>>,
 }
 
 impl Rotator {
@@ -126,6 +128,7 @@ impl Rotator {
                 uptime_start: Instant::now(),
                 last_real_check: Mutex::new(Instant::now()),
                 rotating: AtomicBool::new(false),
+                balance_last_check: Mutex::new(std::collections::HashMap::new()),
                 http: reqwest::Client::builder()
                     .timeout(Duration::from_secs(30))
                     .build()
@@ -134,8 +137,22 @@ impl Rotator {
         }
     }
 
+    /// Wird bei jedem Request aufgerufen: Rotation, Balance-Watchdogs, Backend-Gesundheit,
+    /// Tageskosten-Schwelle. Alle Prüfungen sind throttled und nie blockierend.
+    pub async fn run_housekeeping(&self, state: &crate::state::AppState) {
+        self.maybe_rotate(&state.alerts).await;
+        self.check_watchdogs(state, &state.alerts).await;
+        self.check_backend_health(state, &state.alerts).await;
+        let threshold = state.config.alerts.daily_cost_threshold_usd;
+        if threshold > 0.0 {
+            let day_start = crate::history::unix_utc_day_start() as f64;
+            let cost = state.store.spend_since(day_start, None);
+            state.alerts.check_daily_cost(cost, threshold);
+        }
+    }
+
     /// Wird bei jedem Request aufgerufen. Tut nichts, bis eine Rotation fällig ist.
-    pub async fn maybe_rotate(&self) {
+    pub async fn maybe_rotate(&self, alerts: &crate::alerts::AlertService) {
         let inner = &self.inner;
         // Billiger Throttle: echte Prüfung höchstens alle CHECK_INTERVAL.
         {
@@ -164,8 +181,93 @@ impl Rotator {
         inner.rotating.store(false, Ordering::SeqCst);
 
         match res {
-            Ok(summary) => tracing::info!(%summary, "openrouter key rotated"),
-            Err(e) => tracing::warn!(error = %e, "openrouter key rotation failed (retry later)"),
+            Ok(summary) => {
+                tracing::info!(%summary, "openrouter key rotated");
+                alerts.fire("rotation_succeeded", "info", format!("OpenRouter-Key rotiert: {summary}"));
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "openrouter key rotation failed (retry later)");
+                alerts.fire("rotation_failed", "warning", format!("OpenRouter-Key-Rotation fehlgeschlagen: {e}"));
+            }
+        }
+    }
+
+    /// Balance-Watchdog pro Backend (Feature #3): `GET {base_url}/user/balance` (DeepSeek-Format),
+    /// Alerts bei Balance < `min_balance`. Intervall pro Backend konfigurierbar.
+    async fn check_watchdogs(
+        &self,
+        state: &crate::state::AppState,
+        alerts: &crate::alerts::AlertService,
+    ) {
+        let inner = &self.inner;
+        let now = Instant::now();
+        for (id, b) in state.config.backends.iter().filter(|(_, b)| b.enabled) {
+            let Some(w) = &b.watchdog else { continue };
+            if !w.enabled {
+                continue;
+            }
+            let interval = Duration::from_secs(w.check_interval_secs.max(60));
+            let due = {
+                let mut m = inner.balance_last_check.lock().unwrap();
+                let due = match m.get(id) {
+                    Some(last) => last.elapsed() >= interval,
+                    None => true,
+                };
+                if due {
+                    m.insert(id.clone(), now);
+                }
+                due
+            };
+            if !due {
+                continue;
+            }
+            let Ok(Some(key)) = router_providers::provider::resolve_secret(&b.auth) else { continue };
+            let url = format!("{}/user/balance", b.base_url.trim_end_matches('/'));
+            let Ok(resp) = inner.http.get(&url).bearer_auth(key).send().await else { continue };
+            if !resp.status().is_success() {
+                continue;
+            }
+            let Ok(v) = resp.json::<serde_json::Value>().await else { continue };
+            let infos = v
+                .get("balance_infos")
+                .and_then(|a| a.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let entry = infos
+                .iter()
+                .find(|i| i.get("currency").and_then(|c| c.as_str()) == Some(w.balance_currency.as_str()))
+                .or_else(|| infos.first());
+            let Some(entry) = entry else { continue };
+            let balance = entry
+                .get("total_balance")
+                .and_then(|b| b.as_str())
+                .and_then(|s| s.parse::<f64>().ok())
+                .or_else(|| entry.get("total_balance").and_then(|b| b.as_f64()));
+            let Some(balance) = balance else { continue };
+            let currency = entry.get("currency").and_then(|c| c.as_str()).unwrap_or(&w.balance_currency);
+            tracing::info!(backend = %id, %balance, %currency, "balance watchdog check");
+            if balance < w.min_balance {
+                alerts.fire(
+                    "balance_low",
+                    "warning",
+                    format!("{id}: Balance {balance:.2} {currency} < {:.2} {currency}", w.min_balance),
+                );
+            }
+        }
+    }
+
+    /// Backend-Gesundheit (Feature #4): bestätigte Catalog-Fetch-Fehler → `backend_down`-Alert.
+    async fn check_backend_health(
+        &self,
+        state: &crate::state::AppState,
+        alerts: &crate::alerts::AlertService,
+    ) {
+        let now = now_unix();
+        for (id, ts) in state.registry.backend_fetch_failures() {
+            if now.saturating_sub(ts) < 60 {
+                continue; // nur ältere, bestätigte Fehler melden
+            }
+            alerts.fire("backend_down", "warning", format!("Backend '{id}' nicht erreichbar (Catalog-Fetch fehlgeschlagen)"));
         }
     }
 

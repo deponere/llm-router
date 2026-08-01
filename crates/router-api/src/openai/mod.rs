@@ -20,7 +20,7 @@ use crate::state::AppState;
 
 /// `GET /v1/models` — Union aus gemergter Registry.
 pub async fn list_models(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
-    state.rotator.maybe_rotate().await;
+    state.rotator.maybe_rotate(&state.alerts).await;
     let snap = state
         .registry
         .enriched_snapshot()
@@ -65,7 +65,7 @@ pub async fn chat_completions(
 ) -> Result<Response, ApiError> {
     let (profile_hdr, privacy_hdr) = headers_to_hints(&headers);
     let key_name = crate::auth::lookup_key(&headers, &state.config);
-    state.rotator.maybe_rotate().await;
+    state.rotator.run_housekeeping(&state).await;
     let mut norm = openai_to_norm(&body)?;
     if norm.profile_hint.is_none() {
         norm.profile_hint = profile_hdr.clone();

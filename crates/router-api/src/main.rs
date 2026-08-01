@@ -26,6 +26,7 @@ async fn main() -> anyhow::Result<()> {
     let tracker = LatencyTracker::new();
     let registry = RegistryHandle::new(&config, tracker.clone());
     let store = open_store(&cfg_path, &config)?;
+    let alerts_cfg = config.alerts.clone();
     let state = AppState {
         config: Arc::new(config),
         config_path: Arc::new(std::path::PathBuf::from(&cfg_path)),
@@ -33,6 +34,7 @@ async fn main() -> anyhow::Result<()> {
         tracker,
         history: router_api::history::TransactionHistory::new(),
         store,
+        alerts: router_api::alerts::AlertService::new(alerts_cfg),
         rotator: Arc::new(Rotator::from_env()),
         logs: logbuf,
     };

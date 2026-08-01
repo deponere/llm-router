@@ -54,6 +54,7 @@ async fn start_app(mock_url: String) -> (tokio::task::JoinHandle<()>, String) {
         tracker,
         history: router_api::history::TransactionHistory::new(),
         store: router_api::store::Store::default(),
+        alerts: router_api::alerts::AlertService::default(),
         rotator: Arc::new(router_api::rotate::Rotator::from_env()),
         logs: router_api::logbuf::LogBuffer::new(100),
     };

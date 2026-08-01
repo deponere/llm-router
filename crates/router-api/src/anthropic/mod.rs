@@ -25,7 +25,7 @@ pub async fn messages(
 ) -> Result<Response, ApiError> {
     let (profile_hint, privacy_hint) = headers_to_hints(&headers);
     let key_name = crate::auth::lookup_key(&headers, &state.config);
-    state.rotator.maybe_rotate().await;
+    state.rotator.run_housekeeping(&state).await;
     let mut norm = anthropic_to_norm(&body)?;
     if norm.profile_hint.is_none() {
         norm.profile_hint = profile_hint.clone();

@@ -198,6 +198,7 @@ mod tests {
                 app_referer: None,
                 app_title: None,
                 anthropic_version: None,
+                watchdog: None,
             },
         )
     }

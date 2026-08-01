@@ -72,6 +72,12 @@ pub async fn logs_clear(State(state): State<AppState>) -> Json<Value> {
     Json(json!({ "cleared": cleared }))
 }
 
+/// `POST /v1/admin/alerts/test` — feuert einen Test-Alert (Einstellungen-Tab / `router-admin alerts test`).
+pub async fn admin_alerts_test(State(state): State<AppState>) -> Json<Value> {
+    state.alerts.fire_test();
+    Json(json!({ "ok": true, "message": "Test-Alert ausgelöst (Webhook/Telegram, sofern konfiguriert)" }))
+}
+
 /// `GET /v1/admin/keys` — konfigurierte API-Keys (Hash nur maskiert).
 pub async fn admin_keys(State(state): State<AppState>) -> Json<Value> {
     let keys: Vec<Value> = state
