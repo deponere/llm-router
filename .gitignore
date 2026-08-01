@@ -6,3 +6,6 @@
 # router-admin apply backup
 config/router.toml.bak
 *.bak
+
+# SQLite-Nutzungshistorie (Laufzeit-Daten)
+config/data/
