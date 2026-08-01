@@ -307,6 +307,7 @@ A LightLLM-style single-file web UI, embedded in the router (no build step, no e
 - **Usage** — session/today KPIs (calls, output tokens, tokens/s, cost) and the last 50 calls from `/v1/transactions`.
 - **Logs** — live view of the router's in-memory log buffer (last 500 entries, polled every 1.5 s), rendered loguru-style: `ts | LEVEL | target:line - message` with level colors, level filter, search, pause, clear and copy-as-text.
 - **Theme** — dark / light / system switcher in the header (persisted in `localStorage`, no flash on load; `system` follows the OS appearance, including the log level colors).
+- **Language** — English (default), Deutsch, Español, Français — switchable in the header and persisted; number/date formatting follows the locale, default field values (system prompt, explain sample) translate too.
 - **Restart** — `🔄 Neu starten` in the header calls `POST /v1/admin/restart` and reloads once the router is back.
 
 ---

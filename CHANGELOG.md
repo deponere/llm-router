@@ -5,6 +5,7 @@
 ### Added
 - Web interface (`GET /` + `/ui`) — LightLLM-style single-file SPA with five tabs: chat playground (SSE streaming, profile/model controls, routing trace), sortable/filterable model catalog, routing explain dry-run (winner, ranking, rejected reasons), usage KPIs + call history, and a live log viewer
 - Theme switcher (dark / light / system) in the web interface — persisted in `localStorage` without flash, follows `prefers-color-scheme` in system mode; loguru log colors adapt per theme
+- i18n — English default UI with Deutsch / Español / Français switch (persisted, no flash), localized number/date formatting, translated default field values (system prompt, explain sample)
 - Live log viewer — in-memory ring buffer (last 500 entries) fed by a dedicated tracing layer, exposed via `GET /v1/logs` / `POST /v1/logs/clear`, rendered loguru-style (millisecond timestamps, padded level colors, `target:line`) with level filter, search, pause, clear and copy
 - Automatic OpenRouter key rotation — on every request (throttled to a real check every 30 s) the router rotates the inference key via the Management API (`/api/v1/keys`) when process uptime or key age exceeds `OPENROUTER_ROTATE_DAYS`; the management key lives in the macOS Keychain (never plaintext), `OPENROUTER_LIMIT` / `OPENROUTER_LIMIT_RESET` configure the per-key budget
 - `POST /v1/admin/restart` — restart the router process in a new session (survives terminal close); `main` retries the bind so the new process takes over the port cleanly

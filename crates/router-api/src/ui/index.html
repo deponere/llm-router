@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LLM Router · Web-Interface</title>
-<script>try{document.documentElement.dataset.theme=localStorage.getItem("router-theme")||"dark"}catch(e){document.documentElement.dataset.theme="dark"}</script>
+<title>LLM Router · Web UI</title>
+<script>try{var t=localStorage.getItem("router-theme")||"dark";document.documentElement.dataset.theme=t;document.documentElement.lang=localStorage.getItem("router-lang")||"en"}catch(e){document.documentElement.dataset.theme="dark"}</script>
 <style>
   :root {
     --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#2d333b;
@@ -80,6 +80,7 @@
   .search { margin-bottom:10px; }
   .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; margin-right:4px; }
   .pill.Local{ background:#1f6feb33; color:#79c0ff; } .pill.Zdr{ background:#3fb95022; color:#3fb950; } .pill.Standard{ background:#8b949e22; color:#8b949e; }
+  [data-theme="light"] .pill.Local{ color:#0969da; } [data-theme="light"] .pill.Zdr{ color:#1a7f37; } [data-theme="light"] .pill.Standard{ color:#59636e; }
   .trace pre { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:10px; overflow:auto; max-height:300px; font-family:var(--mono); font-size:12px; white-space:pre-wrap; }
   .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
   .kpi { background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center; }
@@ -97,21 +98,27 @@
 <header>
   <h1>LLM <span>Router</span></h1>
   <nav id="nav">
-    <button data-tab="chat" class="active">💬 Chat</button>
-    <button data-tab="models">📦 Modelle</button>
-    <button data-tab="explain">🧭 Erklärung</button>
-    <button data-tab="usage">📊 Nutzung</button>
-    <button data-tab="logs">📜 Logs</button>
+    <button data-tab="chat" class="active" data-i18n="nav.chat">💬 Chat</button>
+    <button data-tab="models" data-i18n="nav.models">📦 Models</button>
+    <button data-tab="explain" data-i18n="nav.explain">🧭 Explain</button>
+    <button data-tab="usage" data-i18n="nav.usage">📊 Usage</button>
+    <button data-tab="logs" data-i18n="nav.logs">📜 Logs</button>
   </nav>
   <div class="status">
-    <span><span id="dot" class="dot"></span> <span id="apiStatus">prüfe…</span></span>
+    <span><span id="dot" class="dot"></span> <span id="apiStatus" data-i18n="status.checking">checking…</span></span>
     <span id="modelCount"></span>
-    <select id="themeSel" style="width:auto" title="Farbschema">
-      <option value="dark">🌙 Dunkel</option>
-      <option value="light">☀️ Hell</option>
-      <option value="system">🖥 System</option>
+    <select id="langSel" style="width:auto" data-i18n-title="lang.title">
+      <option value="en">🇬🇧 English</option>
+      <option value="de">🇩🇪 Deutsch</option>
+      <option value="es">🇪🇸 Español</option>
+      <option value="fr">🇫🇷 Français</option>
     </select>
-    <button class="ghost" id="restartBtn">🔄 Neu starten</button>
+    <select id="themeSel" style="width:auto" data-i18n-title="theme.title">
+      <option value="dark" data-i18n="theme.dark">🌙 Dark</option>
+      <option value="light" data-i18n="theme.light">☀️ Light</option>
+      <option value="system" data-i18n="theme.system">🖥 System</option>
+    </select>
+    <button class="ghost" id="restartBtn" data-i18n="restart.btn">🔄 Restart</button>
   </div>
 </header>
 
@@ -121,32 +128,32 @@
     <div class="grid cols-2">
       <div>
         <div class="card">
-          <h3>Einstellungen</h3>
-          <label>Route-Profil</label>
+          <h3 data-i18n="chat.settings">Settings</h3>
+          <label data-i18n="chat.profile">Route profile</label>
           <select id="profile"><option value="">default</option></select>
-          <label>Modell (leer = auto)</label>
+          <label data-i18n="chat.model">Model (empty = auto)</label>
           <input type="text" id="model" placeholder="auto">
-          <label>System-Prompt</label>
-          <textarea id="sysprompt">Du bist ein hilfreicher Assistent.</textarea>
-          <label>Temperature <span id="tempVal"></span></label>
+          <label data-i18n="chat.system">System prompt</label>
+          <textarea id="sysprompt">You are a helpful assistant.</textarea>
+          <label data-i18n="chat.temperature">Temperature</label>
           <div class="range-row"><input type="range" id="temp" min="0" max="2" step="0.1" value="0.7"><output id="tempOut">0.7</output></div>
-          <label>Max Tokens (leer = Modell-Default)</label>
+          <label data-i18n="chat.maxTokens">Max tokens (empty = model default)</label>
           <input type="number" id="maxTokens" min="1" max="200000" placeholder="—">
-          <div style="margin-top:14px"><button class="primary" id="sendBtn">Senden</button></div>
+          <div style="margin-top:14px"><button class="primary" id="sendBtn" data-i18n="chat.send">Send</button></div>
           <div class="error" id="chatErr"></div>
         </div>
       </div>
       <div class="card chat">
-        <h3>Konversation</h3>
+        <h3 data-i18n="chat.conversation">Conversation</h3>
         <div class="msgs" id="msgs">
-          <div class="hint">Stelle eine Frage — der Router wählt das beste Modell über das Expertensystem.</div>
+          <div class="hint" data-i18n="chat.hint">Ask a question — the router picks the best model via the expert system.</div>
         </div>
         <div class="chat-input">
-          <input type="text" id="chatInput" placeholder="Nachricht eingeben…">
-          <button class="primary" id="sendBtn2">Senden</button>
+          <input type="text" id="chatInput" data-i18n-placeholder="chat.placeholder" placeholder="Type a message…">
+          <button class="primary" id="sendBtn2" data-i18n="chat.send">Send</button>
         </div>
         <details id="traceBox" style="display:none">
-          <summary>Routing-Trace anzeigen</summary>
+          <summary data-i18n="chat.traceShow">Show routing trace</summary>
           <div class="trace" id="traceContent"></div>
         </details>
       </div>
@@ -156,16 +163,16 @@
   <!-- ============ MODELS ============ -->
   <section class="tab" id="tab-models">
     <div class="card">
-      <h3>Modell-Katalog</h3>
-      <input type="text" class="search" id="modelSearch" placeholder="Filtern (ID / Backend / Provider)…">
+      <h3 data-i18n="models.title">Model catalog</h3>
+      <input type="text" class="search" id="modelSearch" data-i18n-placeholder="models.search" placeholder="Filter (ID / backend / provider)…">
       <div style="overflow:auto; max-height:65vh">
       <table id="modelTable">
         <thead><tr>
-          <th data-k="id">Modell</th><th data-k="backend">Backend</th><th data-k="context_length">Context</th>
-          <th data-k="price_in" class="num">In $/Mtok</th><th data-k="price_out" class="num">Out $/Mtok</th>
-          <th data-k="p95" class="num">p95 ms</th><th data-k="intel" class="num">AA-Index</th><th>Modalitäten</th><th>Caps</th><th>Privacy</th>
+          <th data-k="id" data-i18n="models.colModel">Model</th><th data-k="backend" data-i18n="models.colBackend">Backend</th><th data-k="context_length" data-i18n="models.colCtx">Context</th>
+          <th data-k="price_in" class="num" data-i18n="models.colIn">In $/Mtok</th><th data-k="price_out" class="num" data-i18n="models.colOut">Out $/Mtok</th>
+          <th data-k="p95" class="num" data-i18n="models.colP95">p95 ms</th><th data-k="intel" class="num" data-i18n="models.colAA">AA-Index</th><th data-i18n="models.colMod">Modalities</th><th data-i18n="models.colCaps">Caps</th><th data-i18n="models.colPriv">Privacy</th>
         </tr></thead>
-        <tbody id="modelBody"><tr><td colspan="10" class="loading">Lade Modell-Katalog…</td></tr></tbody>
+        <tbody id="modelBody"><tr><td colspan="10" class="loading" data-i18n="models.loading">Loading model catalog…</td></tr></tbody>
       </table>
       </div>
       <div class="hint" id="modelHint"></div>
@@ -176,23 +183,23 @@
   <section class="tab" id="tab-explain">
     <div class="grid cols-2">
       <div class="card">
-        <h3>Request (Dry-Run)</h3>
-        <label>Profil</label>
+        <h3 data-i18n="explain.title">Request (dry-run)</h3>
+        <label data-i18n="explain.profile">Profile</label>
         <select id="explainProfile"><option value="">default</option></select>
-        <label>Request-JSON (OpenAI-Format)</label>
+        <label data-i18n="explain.body">Request JSON (OpenAI format)</label>
         <textarea id="explainBody" style="min-height:220px; font-family:var(--mono); font-size:12px">{
   "model": "auto",
   "messages": [
-    {"role": "user", "content": "Erkläre Quantenverschränkung einfach."}
+    {"role": "user", "content": "Explain quantum entanglement simply."}
   ],
   "max_tokens": 200
 }</textarea>
-        <div style="margin-top:10px"><button class="primary" id="explainBtn">Erklären (Dry-Run)</button></div>
+        <div style="margin-top:10px"><button class="primary" id="explainBtn" data-i18n="explain.btn">Explain (dry-run)</button></div>
         <div class="error" id="explainErr"></div>
       </div>
       <div class="card">
-        <h3>Entscheidung</h3>
-        <div id="explainResult"><div class="hint">Kein Dry-Run ausgeführt. Das Expertensystem filtert und scored alle Kandidaten deterministisch.</div></div>
+        <h3 data-i18n="explain.decision">Decision</h3>
+        <div id="explainResult"><div class="hint" data-i18n="explain.hint">No dry-run executed. The expert system filters and scores all candidates deterministically.</div></div>
       </div>
     </div>
   </section>
@@ -200,19 +207,19 @@
   <!-- ============ USAGE ============ -->
   <section class="tab" id="tab-usage">
     <div class="card">
-      <h3>Session</h3>
+      <h3 data-i18n="usage.session">Session</h3>
       <div class="kpis" id="kpiSession"></div>
     </div>
     <div class="card">
-      <h3>Heute (UTC)</h3>
+      <h3 data-i18n="usage.today">Today (UTC)</h3>
       <div class="kpis" id="kpiToday"></div>
     </div>
     <div class="card">
-      <h3>Letzte Aufrufe</h3>
+      <h3 data-i18n="usage.recent">Recent calls</h3>
       <div style="overflow:auto; max-height:50vh">
       <table>
-        <thead><tr><th>Zeit</th><th>API</th><th>Profil</th><th>Backend</th><th>Modell</th><th class="num">Dauer</th><th class="num">Tok out</th><th class="num">Kosten</th></tr></thead>
-        <tbody id="txBody"><tr><td colspan="8" class="loading">Lade…</td></tr></tbody>
+        <thead><tr><th data-i18n="usage.colTime">Time</th><th>API</th><th data-i18n="usage.colProfile">Profile</th><th data-i18n="usage.colBackend">Backend</th><th data-i18n="usage.colModel">Model</th><th class="num" data-i18n="usage.colDur">Duration</th><th class="num" data-i18n="usage.colTok">Tok out</th><th class="num" data-i18n="usage.colCost">Cost</th></tr></thead>
+        <tbody id="txBody"><tr><td colspan="8" class="loading" data-i18n="usage.loading">Loading…</td></tr></tbody>
       </table>
       </div>
     </div>
@@ -221,8 +228,8 @@
   <section class="tab" id="tab-logs">
     <div class="card">
       <div style="display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap">
-        <h3 style="margin:0; flex:1">Logs <span class="badge" id="logCount"></span></h3>
-        <label style="margin:0">Level</label>
+        <h3 style="margin:0; flex:1"><span data-i18n="logs.title">Logs</span> <span class="badge" id="logCount"></span></h3>
+        <label style="margin:0" data-i18n="logs.level">Level</label>
         <select id="logLevel" style="width:auto">
           <option value="TRACE">TRACE</option>
           <option value="DEBUG" selected>DEBUG</option>
@@ -230,13 +237,13 @@
           <option value="WARNING">WARNING</option>
           <option value="ERROR">ERROR</option>
         </select>
-        <input type="text" id="logSearch" placeholder="Filtern…" style="width:200px">
-        <button class="ghost" id="logPause">⏸ Pause</button>
-        <button class="ghost" id="logClear">🗑 Leeren</button>
-        <button class="ghost" id="logCopy">📋 Kopieren</button>
+        <input type="text" id="logSearch" data-i18n-placeholder="logs.search" placeholder="Filter…" style="width:200px">
+        <button class="ghost" id="logPause" data-i18n="logs.pause">⏸ Pause</button>
+        <button class="ghost" id="logClear" data-i18n="logs.clear">🗑 Clear</button>
+        <button class="ghost" id="logCopy" data-i18n="logs.copy">📋 Copy</button>
       </div>
       <div id="logBox" style="background:var(--log-bg); border:1px solid var(--border); border-radius:8px; padding:12px 14px; overflow:auto; max-height:70vh; font-family:var(--mono); font-size:12px; line-height:1.7; white-space:pre-wrap"></div>
-      <div class="hint">Live-Polling (1,5 s) · In-Memory-Ringbuffer (letzte 500 Einträge) · Format wie loguru: <code>ts | LEVEL | target:line - message</code></div>
+      <div class="hint" id="logHint"></div>
     </div>
   </section>
 </main>
@@ -245,6 +252,162 @@
 "use strict";
 const $ = s => document.querySelector(s);
 
+/* ================= i18n (en default / de / es / fr) ================= */
+const I18N = {
+en: {
+  "app.title": "LLM Router · Web UI",
+  "nav.chat": "💬 Chat", "nav.models": "📦 Models", "nav.explain": "🧭 Explain", "nav.usage": "📊 Usage", "nav.logs": "📜 Logs",
+  "status.checking": "checking…", "status.online": "online", "status.offline": "offline",
+  "lang.title": "Language",
+  "theme.title": "Color scheme", "theme.dark": "🌙 Dark", "theme.light": "☀️ Light", "theme.system": "🖥 System",
+  "chat.settings": "Settings", "chat.profile": "Route profile", "chat.model": "Model (empty = auto)", "chat.system": "System prompt",
+  "chat.sysDefault": "You are a helpful assistant.", "chat.temperature": "Temperature", "chat.maxTokens": "Max tokens (empty = model default)",
+  "chat.send": "Send", "chat.conversation": "Conversation", "chat.placeholder": "Type a message…",
+  "chat.hint": "Ask a question — the router picks the best model via the expert system.", "chat.traceShow": "Show routing trace",
+  "chat.error": "Error", "chat.emptyReply": "(empty reply)", "chat.metaModel": "model:",
+  "trace.candidates": "Candidates:", "trace.weights": "Weights:", "trace.ranking": "Ranking", "trace.rejected": "Rejected",
+  "trace.colModel": "Model", "trace.colScore": "Score", "trace.colCost": "Cost", "trace.colLat": "Lat.", "trace.colCtx": "Ctx", "trace.colPref": "Pref.", "trace.colQual": "Qual.",
+  "models.title": "Model catalog", "models.search": "Filter (ID / backend / provider)…",
+  "models.colModel": "Model", "models.colBackend": "Backend", "models.colCtx": "Context", "models.colIn": "In $/Mtok", "models.colOut": "Out $/Mtok",
+  "models.colP95": "p95 ms", "models.colAA": "AA-Index", "models.colMod": "Modalities", "models.colCaps": "Caps", "models.colPriv": "Privacy",
+  "models.loading": "Loading model catalog…", "models.empty": "No models — check backend status.",
+  "models.of": "of", "models.models": "models", "models.source": "Source: /v1/registry · Sorting:",
+  "explain.title": "Request (dry-run)", "explain.profile": "Profile", "explain.body": "Request JSON (OpenAI format)",
+  "explain.sample": "{\n  \"model\": \"auto\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"Explain quantum entanglement simply.\"}\n  ],\n  \"max_tokens\": 200\n}",
+  "explain.btn": "Explain (dry-run)", "explain.decision": "Decision",
+  "explain.hint": "No dry-run executed. The expert system filters and scores all candidates deterministically.",
+  "explain.analyzing": "Analyzing…", "explain.invalidJson": "Invalid JSON:",
+  "explain.profileLbl": "Profile:", "explain.winner": "Winner:", "explain.candidates": "Total candidates:",
+  "explain.promptEst": "Estimated prompt:", "explain.weights": "Weights:", "explain.caps": "Caps required:",
+  "usage.session": "Session", "usage.today": "Today (UTC)", "usage.recent": "Recent calls",
+  "usage.colTime": "Time", "usage.colProfile": "Profile", "usage.colBackend": "Backend", "usage.colModel": "Model",
+  "usage.colDur": "Duration", "usage.colTok": "Tok out", "usage.colCost": "Cost",
+  "usage.calls": "Calls", "usage.tokensOut": "Output tokens", "usage.tps": "tok/s", "usage.cost": "Cost",
+  "usage.loading": "Loading…", "usage.empty": "No calls in this session yet.",
+  "logs.title": "Logs", "logs.level": "Level", "logs.search": "Filter…",
+  "logs.pause": "⏸ Pause", "logs.resume": "▶ Resume", "logs.clear": "🗑 Clear", "logs.copy": "📋 Copy", "logs.copied": "✓ Copied",
+  "logs.empty": "(no entries for this filter)", "logs.entries": "entries", "logs.filtered": "filtered",
+  "logs.hint": "Live polling (1.5 s) · in-memory ring buffer (last 500 entries) · loguru format: <code>ts | LEVEL | target:line - message</code>",
+  "restart.btn": "🔄 Restart", "restart.confirm": "Really restart the router? Brief interruption (~2 s).",
+  "restart.restarting": "⏳ Restarting…", "restart.timeout": "Router not responding — reload the page?"
+},
+de: {
+  "app.title": "LLM Router · Web-Interface",
+  "nav.chat": "💬 Chat", "nav.models": "📦 Modelle", "nav.explain": "🧭 Erklärung", "nav.usage": "📊 Nutzung", "nav.logs": "📜 Logs",
+  "status.checking": "prüfe…", "status.online": "online", "status.offline": "offline",
+  "lang.title": "Sprache",
+  "theme.title": "Farbschema", "theme.dark": "🌙 Dunkel", "theme.light": "☀️ Hell", "theme.system": "🖥 System",
+  "chat.settings": "Einstellungen", "chat.profile": "Route-Profil", "chat.model": "Modell (leer = auto)", "chat.system": "System-Prompt",
+  "chat.sysDefault": "Du bist ein hilfreicher Assistent.", "chat.temperature": "Temperature", "chat.maxTokens": "Max Tokens (leer = Modell-Default)",
+  "chat.send": "Senden", "chat.conversation": "Konversation", "chat.placeholder": "Nachricht eingeben…",
+  "chat.hint": "Stelle eine Frage — der Router wählt das beste Modell über das Expertensystem.", "chat.traceShow": "Routing-Trace anzeigen",
+  "chat.error": "Fehler", "chat.emptyReply": "(leere Antwort)", "chat.metaModel": "modell:",
+  "trace.candidates": "Kandidaten:", "trace.weights": "Gewichtung:", "trace.ranking": "Ranking", "trace.rejected": "Verworfen",
+  "trace.colModel": "Modell", "trace.colScore": "Score", "trace.colCost": "Kosten", "trace.colLat": "Lat.", "trace.colCtx": "Ctx", "trace.colPref": "Präf.", "trace.colQual": "Qual.",
+  "models.title": "Modell-Katalog", "models.search": "Filtern (ID / Backend / Provider)…",
+  "models.colModel": "Modell", "models.colBackend": "Backend", "models.colCtx": "Context", "models.colIn": "In $/Mtok", "models.colOut": "Out $/Mtok",
+  "models.colP95": "p95 ms", "models.colAA": "AA-Index", "models.colMod": "Modalitäten", "models.colCaps": "Caps", "models.colPriv": "Privacy",
+  "models.loading": "Lade Modell-Katalog…", "models.empty": "Keine Modelle — Backend-Status prüfen.",
+  "models.of": "von", "models.models": "Modellen", "models.source": "Quelle: /v1/registry · Sortierung:",
+  "explain.title": "Request (Dry-Run)", "explain.profile": "Profil", "explain.body": "Request-JSON (OpenAI-Format)",
+  "explain.sample": "{\n  \"model\": \"auto\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"Erkläre Quantenverschränkung einfach.\"}\n  ],\n  \"max_tokens\": 200\n}",
+  "explain.btn": "Erklären (Dry-Run)", "explain.decision": "Entscheidung",
+  "explain.hint": "Kein Dry-Run ausgeführt. Das Expertensystem filtert und scored alle Kandidaten deterministisch.",
+  "explain.analyzing": "Analysiere…", "explain.invalidJson": "Ungültiges JSON:",
+  "explain.profileLbl": "Profil:", "explain.winner": "Winner:", "explain.candidates": "Kandidaten gesamt:",
+  "explain.promptEst": "Prompts (geschätzt):", "explain.weights": "Gewichtung:", "explain.caps": "Caps benötigt:",
+  "usage.session": "Session", "usage.today": "Heute (UTC)", "usage.recent": "Letzte Aufrufe",
+  "usage.colTime": "Zeit", "usage.colProfile": "Profil", "usage.colBackend": "Backend", "usage.colModel": "Modell",
+  "usage.colDur": "Dauer", "usage.colTok": "Tok out", "usage.colCost": "Kosten",
+  "usage.calls": "Aufrufe", "usage.tokensOut": "Output-Tokens", "usage.tps": "tok/s", "usage.cost": "Kosten",
+  "usage.loading": "Lade…", "usage.empty": "Noch keine Aufrufe in dieser Session.",
+  "logs.title": "Logs", "logs.level": "Level", "logs.search": "Filtern…",
+  "logs.pause": "⏸ Pause", "logs.resume": "▶ Weiter", "logs.clear": "🗑 Leeren", "logs.copy": "📋 Kopieren", "logs.copied": "✓ Kopiert",
+  "logs.empty": "(keine Einträge für diesen Filter)", "logs.entries": "Einträge", "logs.filtered": "gefiltert",
+  "logs.hint": "Live-Polling (1,5 s) · In-Memory-Ringbuffer (letzte 500 Einträge) · Format wie loguru: <code>ts | LEVEL | target:line - message</code>",
+  "restart.btn": "🔄 Neu starten", "restart.confirm": "Router wirklich neu starten? Kurze Unterbrechung (~2 s).",
+  "restart.restarting": "⏳ Neustart…", "restart.timeout": "Router antwortet nicht — Seite neu laden?"
+},
+es: {
+  "app.title": "LLM Router · Interfaz web",
+  "nav.chat": "💬 Chat", "nav.models": "📦 Modelos", "nav.explain": "🧭 Explicación", "nav.usage": "📊 Uso", "nav.logs": "📜 Registros",
+  "status.checking": "comprobando…", "status.online": "en línea", "status.offline": "sin conexión",
+  "lang.title": "Idioma",
+  "theme.title": "Esquema de color", "theme.dark": "🌙 Oscuro", "theme.light": "☀️ Claro", "theme.system": "🖥 Sistema",
+  "chat.settings": "Ajustes", "chat.profile": "Perfil de ruta", "chat.model": "Modelo (vacío = auto)", "chat.system": "Prompt del sistema",
+  "chat.sysDefault": "Eres un asistente útil.", "chat.temperature": "Temperatura", "chat.maxTokens": "Máx. tokens (vacío = predeterminado)",
+  "chat.send": "Enviar", "chat.conversation": "Conversación", "chat.placeholder": "Escribe un mensaje…",
+  "chat.hint": "Haz una pregunta: el router elige el mejor modelo mediante el sistema experto.", "chat.traceShow": "Mostrar traza de ruteo",
+  "chat.error": "Error", "chat.emptyReply": "(respuesta vacía)", "chat.metaModel": "modelo:",
+  "trace.candidates": "Candidatos:", "trace.weights": "Ponderación:", "trace.ranking": "Ranking", "trace.rejected": "Rechazados",
+  "trace.colModel": "Modelo", "trace.colScore": "Punt.", "trace.colCost": "Coste", "trace.colLat": "Lat.", "trace.colCtx": "Ctx", "trace.colPref": "Pref.", "trace.colQual": "Cal.",
+  "models.title": "Catálogo de modelos", "models.search": "Filtrar (ID / backend / proveedor)…",
+  "models.colModel": "Modelo", "models.colBackend": "Backend", "models.colCtx": "Contexto", "models.colIn": "Entr. $/Mtok", "models.colOut": "Sal. $/Mtok",
+  "models.colP95": "p95 ms", "models.colAA": "Índice AA", "models.colMod": "Modalidades", "models.colCaps": "Capacidades", "models.colPriv": "Privacidad",
+  "models.loading": "Cargando catálogo…", "models.empty": "Sin modelos: comprueba el estado de los backends.",
+  "models.of": "de", "models.models": "modelos", "models.source": "Fuente: /v1/registry · Ordenación:",
+  "explain.title": "Petición (prueba)", "explain.profile": "Perfil", "explain.body": "JSON de petición (formato OpenAI)",
+  "explain.sample": "{\n  \"model\": \"auto\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"Explica el entrelazamiento cuántico de forma sencilla.\"}\n  ],\n  \"max_tokens\": 200\n}",
+  "explain.btn": "Explicar (prueba)", "explain.decision": "Decisión",
+  "explain.hint": "Sin prueba ejecutada. El sistema experto filtra y puntúa todos los candidatos de forma determinista.",
+  "explain.analyzing": "Analizando…", "explain.invalidJson": "JSON no válido:",
+  "explain.profileLbl": "Perfil:", "explain.winner": "Ganador:", "explain.candidates": "Candidatos totales:",
+  "explain.promptEst": "Prompt estimado:", "explain.weights": "Ponderación:", "explain.caps": "Capacidades requeridas:",
+  "usage.session": "Sesión", "usage.today": "Hoy (UTC)", "usage.recent": "Últimas llamadas",
+  "usage.colTime": "Hora", "usage.colProfile": "Perfil", "usage.colBackend": "Backend", "usage.colModel": "Modelo",
+  "usage.colDur": "Duración", "usage.colTok": "Tok sal.", "usage.colCost": "Coste",
+  "usage.calls": "Llamadas", "usage.tokensOut": "Tokens de salida", "usage.tps": "tok/s", "usage.cost": "Coste",
+  "usage.loading": "Cargando…", "usage.empty": "Aún no hay llamadas en esta sesión.",
+  "logs.title": "Registros", "logs.level": "Nivel", "logs.search": "Filtrar…",
+  "logs.pause": "⏸ Pausa", "logs.resume": "▶ Continuar", "logs.clear": "🗑 Vaciar", "logs.copy": "📋 Copiar", "logs.copied": "✓ Copiado",
+  "logs.empty": "(sin entradas para este filtro)", "logs.entries": "entradas", "logs.filtered": "filtradas",
+  "logs.hint": "Sondeo en vivo (1,5 s) · búfer circular en memoria (últimas 500 entradas) · formato loguru: <code>ts | LEVEL | target:line - mensaje</code>",
+  "restart.btn": "🔄 Reiniciar", "restart.confirm": "¿Reiniciar el router? Breve interrupción (~2 s).",
+  "restart.restarting": "⏳ Reiniciando…", "restart.timeout": "El router no responde: ¿recargar la página?"
+},
+fr: {
+  "app.title": "LLM Router · Interface web",
+  "nav.chat": "💬 Chat", "nav.models": "📦 Modèles", "nav.explain": "🧭 Explication", "nav.usage": "📊 Utilisation", "nav.logs": "📜 Journaux",
+  "status.checking": "vérification…", "status.online": "en ligne", "status.offline": "hors ligne",
+  "lang.title": "Langue",
+  "theme.title": "Schéma de couleurs", "theme.dark": "🌙 Sombre", "theme.light": "☀️ Clair", "theme.system": "🖥 Système",
+  "chat.settings": "Paramètres", "chat.profile": "Profil de routage", "chat.model": "Modèle (vide = auto)", "chat.system": "Prompt système",
+  "chat.sysDefault": "Vous êtes un assistant utile.", "chat.temperature": "Température", "chat.maxTokens": "Max tokens (vide = défaut)",
+  "chat.send": "Envoyer", "chat.conversation": "Conversation", "chat.placeholder": "Saisissez un message…",
+  "chat.hint": "Posez une question — le routeur choisit le meilleur modèle via le système expert.", "chat.traceShow": "Afficher la trace de routage",
+  "chat.error": "Erreur", "chat.emptyReply": "(réponse vide)", "chat.metaModel": "modèle :",
+  "trace.candidates": "Candidats :", "trace.weights": "Pondération :", "trace.ranking": "Classement", "trace.rejected": "Rejetés",
+  "trace.colModel": "Modèle", "trace.colScore": "Score", "trace.colCost": "Coût", "trace.colLat": "Lat.", "trace.colCtx": "Ctx", "trace.colPref": "Préf.", "trace.colQual": "Qual.",
+  "models.title": "Catalogue des modèles", "models.search": "Filtrer (ID / backend / fournisseur)…",
+  "models.colModel": "Modèle", "models.colBackend": "Backend", "models.colCtx": "Contexte", "models.colIn": "Entrée $/Mtok", "models.colOut": "Sortie $/Mtok",
+  "models.colP95": "p95 ms", "models.colAA": "Indice AA", "models.colMod": "Modalités", "models.colCaps": "Capacités", "models.colPriv": "Confidentialité",
+  "models.loading": "Chargement du catalogue…", "models.empty": "Aucun modèle — vérifiez l'état des backends.",
+  "models.of": "sur", "models.models": "modèles", "models.source": "Source : /v1/registry · Tri :",
+  "explain.title": "Requête (essai)", "explain.profile": "Profil", "explain.body": "JSON de requête (format OpenAI)",
+  "explain.sample": "{\n  \"model\": \"auto\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"Expliquez l'intrication quantique simplement.\"}\n  ],\n  \"max_tokens\": 200\n}",
+  "explain.btn": "Expliquer (essai)", "explain.decision": "Décision",
+  "explain.hint": "Aucun essai exécuté. Le système expert filtre et note tous les candidats de manière déterministe.",
+  "explain.analyzing": "Analyse…", "explain.invalidJson": "JSON invalide :",
+  "explain.profileLbl": "Profil :", "explain.winner": "Gagnant :", "explain.candidates": "Candidats au total :",
+  "explain.promptEst": "Prompt estimé :", "explain.weights": "Pondération :", "explain.caps": "Capacités requises :",
+  "usage.session": "Session", "usage.today": "Aujourd'hui (UTC)", "usage.recent": "Derniers appels",
+  "usage.colTime": "Heure", "usage.colProfile": "Profil", "usage.colBackend": "Backend", "usage.colModel": "Modèle",
+  "usage.colDur": "Durée", "usage.colTok": "Tok sortie", "usage.colCost": "Coût",
+  "usage.calls": "Appels", "usage.tokensOut": "Tokens de sortie", "usage.tps": "tok/s", "usage.cost": "Coût",
+  "usage.loading": "Chargement…", "usage.empty": "Aucun appel dans cette session pour l'instant.",
+  "logs.title": "Journaux", "logs.level": "Niveau", "logs.search": "Filtrer…",
+  "logs.pause": "⏸ Pause", "logs.resume": "▶ Reprendre", "logs.clear": "🗑 Vider", "logs.copy": "📋 Copier", "logs.copied": "✓ Copié",
+  "logs.empty": "(aucune entrée pour ce filtre)", "logs.entries": "entrées", "logs.filtered": "filtrées",
+  "logs.hint": "Sondage en direct (1,5 s) · tampon circulaire en mémoire (500 dernières entrées) · format loguru : <code>ts | LEVEL | target:line - message</code>",
+  "restart.btn": "🔄 Redémarrer", "restart.confirm": "Redémarrer le routeur ? Brève interruption (~2 s).",
+  "restart.restarting": "⏳ Redémarrage…", "restart.timeout": "Le routeur ne répond pas — recharger la page ?"
+}
+};
+
+function curLang() { return localStorage.getItem("router-lang") || "en"; }
+function localeOf() { return { en: "en-US", de: "de-DE", es: "es-ES", fr: "fr-FR" }[curLang()] || "en-US"; }
+function t(key) { const d = I18N[curLang()] || I18N.en; return d[key] ?? I18N.en[key] ?? key; }
+
 /* ---------- API helpers ---------- */
 async function api(path, opts) {
   const r = await fetch(path, opts);
@@ -252,10 +415,38 @@ async function api(path, opts) {
   return r.json();
 }
 const fmtUsd = v => v == null ? "—" : "$" + Number(v).toFixed(4);
-const fmtNum = v => v == null || isNaN(v) ? "—" : Number(v).toLocaleString("de-DE");
+const fmtNum = v => v == null || isNaN(v) ? "—" : Number(v).toLocaleString(localeOf());
 const fmtMs = v => v == null ? "—" : (v < 1000 ? v + " ms" : (v/1000).toFixed(2) + " s");
 const fmtCost = v => v == null ? "—" : "$" + Number(v).toFixed(6);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- Sprache anwenden (alle statischen + gecachten Texte) ---------- */
+let sysTouched = false, explainTouched = false, lastTrace = null, lastExplain = null, lastUsage = null;
+function applyLang() {
+  const lang = curLang();
+  document.documentElement.lang = lang;
+  document.title = t("app.title");
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  document.querySelectorAll("[data-i18n-title]").forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  $("#logHint").innerHTML = t("logs.hint");
+  if (logsPaused) $("#logPause").textContent = t("logs.resume");
+  if (!sysTouched) $("#sysprompt").value = t("chat.sysDefault");
+  if (!explainTouched) $("#explainBody").value = t("explain.sample");
+  checkStatus(false);
+  if (lastTrace) renderTrace(lastTrace);
+  if (lastExplain) renderExplain(lastExplain);
+  if (lastUsage) renderUsage(lastUsage);
+  if (allModels.length) renderModels();
+  if (logCache.length) renderLogs();
+}
+$("#sysprompt").addEventListener("input", () => sysTouched = true);
+$("#explainBody").addEventListener("input", () => explainTouched = true);
+$("#langSel").value = curLang();
+$("#langSel").onchange = () => {
+  localStorage.setItem("router-lang", $("#langSel").value);
+  applyLang();
+};
 
 /* ---------- Tabs ---------- */
 document.querySelectorAll("#nav button").forEach(b => b.onclick = () => {
@@ -266,7 +457,7 @@ document.querySelectorAll("#nav button").forEach(b => b.onclick = () => {
   if (b.dataset.tab === "logs") refreshLogs();
 });
 
-/* ---------- Theme (dunkel / hell / system) ---------- */
+/* ---------- Theme (dark / light / system) ---------- */
 function effectiveTheme() {
   const t = localStorage.getItem("router-theme") || "dark";
   if (t === "system") return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
@@ -276,25 +467,25 @@ $("#themeSel").value = localStorage.getItem("router-theme") || "dark";
 $("#themeSel").onchange = () => {
   localStorage.setItem("router-theme", $("#themeSel").value);
   document.documentElement.dataset.theme = $("#themeSel").value;
-  renderLogs(); // Level-Farben der bereits gerenderten Zeilen anpassen
+  renderLogs(); // Level colors of already-rendered lines
 };
 matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
   if ($("#themeSel").value === "system") renderLogs();
 });
 
 /* ---------- Status ---------- */
-async function checkStatus() {
+async function checkStatus(quiet) {
   try {
     const r = await fetch("/v1/models");
-    if (r.ok) { $("#dot").className = "dot ok"; $("#apiStatus").textContent = "online"; }
+    if (r.ok) { $("#dot").className = "dot ok"; $("#apiStatus").textContent = t("status.online"); }
     else throw 0;
-  } catch { $("#dot").className = "dot err"; $("#apiStatus").textContent = "offline"; }
+  } catch { $("#dot").className = "dot err"; $("#apiStatus").textContent = t("status.offline"); }
 }
-/* ---------- Neustart ---------- */
+/* ---------- Restart ---------- */
 $("#restartBtn").onclick = async () => {
-  if (!confirm("Router wirklich neu starten? Kurze Unterbrechung (~2 s).")) return;
+  if (!confirm(t("restart.confirm"))) return;
   const btn = $("#restartBtn");
-  btn.disabled = true; btn.textContent = "⏳ Neustart…";
+  btn.disabled = true; btn.textContent = t("restart.restarting");
   try { await fetch("/v1/admin/restart", { method: "POST" }); } catch {}
   const t0 = Date.now();
   while (Date.now() - t0 < 20000) {
@@ -304,13 +495,13 @@ $("#restartBtn").onclick = async () => {
       if (r.ok) { location.reload(); return; }
     } catch {}
   }
-  btn.disabled = false; btn.textContent = "🔄 Neu starten";
-  alert("Router antwortet nicht — Seite neu laden?");
+  btn.disabled = false; btn.textContent = t("restart.btn");
+  alert(t("restart.timeout"));
 };
 
 checkStatus();
 
-/* ---------- Modelle ---------- */
+/* ---------- Models ---------- */
 let allModels = [];
 async function loadModels() {
   const tbody = $("#modelBody");
@@ -318,8 +509,8 @@ async function loadModels() {
     const d = await api("/v1/registry");
     allModels = d.models || [];
     renderModels();
-    $("#modelCount").textContent = allModels.length + " Modelle";
-    $("#modelHint").textContent = "Quelle: /v1/registry · sortieren per Klick auf Spaltenkopf";
+    $("#modelCount").textContent = allModels.length + " " + t("models.models");
+    $("#modelHint").textContent = t("models.source");
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="10" class="error">${esc(e.message)}</td></tr>`;
   }
@@ -350,8 +541,8 @@ function renderModels() {
     <td>${(m.input_modalities||[]).map(x=>`<span class="pill">${x}</span>`).join("")}</td>
     <td>${(m.capabilities||[]).map(x=>`<span class="pill">${x}</span>`).join("")}</td>
     <td><span class="pill ${esc(m.privacy_class)}">${esc(m.privacy_class)}</span></td>
-  </tr>`).join("") || `<tr><td colspan="10" class="hint">Keine Modelle — Backend-Status prüfen.</td></tr>`;
-  $("#modelHint").textContent = `${rows.length} von ${allModels.length} Modellen · Quelle: /v1/registry · Sortierung: ${sortKey}${sortDir>0?" ↑":" ↓"}`;
+  </tr>`).join("") || `<tr><td colspan="10" class="hint">${t("models.empty")}</td></tr>`;
+  $("#modelHint").textContent = `${rows.length} ${t("models.of")} ${allModels.length} ${t("models.models")} · ${t("models.source")} ${sortKey}${sortDir>0?" ↑":" ↓"}`;
 }
 $("#modelSearch").oninput = renderModels;
 document.querySelectorAll("#modelTable th").forEach(th => th.onclick = () => {
@@ -360,14 +551,14 @@ document.querySelectorAll("#modelTable th").forEach(th => th.onclick = () => {
   renderModels();
 });
 
-/* ---------- Profile laden (aus /v1/models Auto-Einträgen) ---------- */
+/* ---------- Load profiles (from /v1/models auto entries) ---------- */
 async function loadProfiles() {
   try {
     const d = await api("/v1/models");
     const profiles = new Set();
     for (const m of d.data || []) {
-      // Synthetische Profil-Einträge haben owned_by "router"; echte Modelle
-      // (z. B. openrouter/auto) dürfen nicht als Profil erscheinen.
+      // Synthetic profile entries have owned_by "router"; real models
+      // (e.g. openrouter/auto) must not appear as a profile.
       if (m.owned_by === "router" && typeof m.id === "string" && m.id.endsWith("/auto"))
         profiles.add(m.id.slice(0, -5));
     }
@@ -376,11 +567,11 @@ async function loadProfiles() {
       const el = $(sel);
       el.innerHTML = opts.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
     }
-    $("#modelCount").textContent = (d.data?.length || 0) + " Modelle";
+    $("#modelCount").textContent = (d.data?.length || 0) + " " + t("models.models");
   } catch (e) { $("#modelCount").textContent = ""; }
 }
 
-/* ---------- Chat (SSE-Streaming) ---------- */
+/* ---------- Chat (SSE streaming) ---------- */
 let history = [];
 let streaming = false;
 
@@ -430,7 +621,7 @@ async function doSend() {
       acc = j.choices?.[0]?.message?.content || "";
       model = j.model || "";
       usage = j.usage || null;
-      bubble.textContent = acc || "(leere Antwort)";
+      bubble.textContent = acc || t("chat.emptyReply");
     } else {
       const reader = resp.body.getReader();
       const dec = new TextDecoder();
@@ -454,16 +645,16 @@ async function doSend() {
           }
         }
       }
-      bubble.textContent = acc || "(leere Antwort)";
+      bubble.textContent = acc || t("chat.emptyReply");
     }
-    const meta = [`modell: ${model || "auto"}`];
+    const meta = [`${t("chat.metaModel")} ${model || "auto"}`];
     if (usage) meta.push(`${fmtNum(usage.completion_tokens)} tok · ${fmtCost(usage.cost)}`);
     bubble.querySelector(".meta")?.remove();
     const m = document.createElement("span"); m.className = "meta"; m.textContent = meta.join(" · "); bubble.appendChild(m);
     history.push({ role: "assistant", content: acc });
     fetchExplainTrace();
   } catch (e) {
-    bubble.textContent = "⚠ Fehler: " + e.message;
+    bubble.textContent = "⚠ " + t("chat.error") + ": " + e.message;
     history.pop();
     $("#chatErr").textContent = e.message;
   } finally {
@@ -472,7 +663,7 @@ async function doSend() {
   }
 }
 
-/* Routing-Trace der aktuellen Konversation (nur letzte User-Nachricht) */
+/* Routing trace of the current conversation (last user message) */
 async function fetchExplainTrace() {
   try {
     const msgs = [];
@@ -483,26 +674,30 @@ async function fetchExplainTrace() {
     const prof = $("#profile").value;
     if (prof && prof !== "default") headers["x-route-profile"] = prof;
     const d = await api("/v1/explain", { method: "POST", headers, body: JSON.stringify({ model: $("#model").value.trim() || "auto", messages: msgs, max_tokens: 200 }) });
-    const ranked = (d.trace?.ranked || []).slice(0, 5);
-    const rejected = (d.trace?.rejected || []).slice(0, 8);
-    let html = `<b>${esc(d.profile)}</b> → <b style="color:var(--accent)">${esc(d.winner)}</b> <span class="badge">${esc(d.winner_backend)}</span>\n`;
-    html += `<div class="detail-grid">
-      <span><span class="lbl">Kandidaten:</span> ${d.trace?.total_candidates ?? "—"}</span>
-      <span><span class="lbl">Gewichtung:</span> ${Object.entries(d.weights||{}).map(([k,v])=>`${k} ${(v*100).toFixed(0)}%`).join(" · ")}</span>
-    </div>`;
-    if (ranked.length) {
-      html += "<h4 style='margin-top:10px'>Ranking</h4><table><tr><th>Modell</th><th class='num'>Score</th><th class='num'>Kosten</th><th class='num'>Lat.</th><th class='num'>Ctx</th><th class='num'>Präf.</th><th class='num'>Qual.</th></tr>";
-      for (const r of ranked) html += `<tr><td>${esc(r.model_id)}</td><td class='num'>${r.score.toFixed(3)}</td><td class='num'>${fmtUsd(r.expected_cost_usd)}</td><td class='num'>${r.used_p95_ms}</td><td class='num'>${r.context_score.toFixed(2)}</td><td class='num'>${r.preference_score.toFixed(2)}</td><td class='num'>${r.quality_score.toFixed(2)}</td></tr>`;
-      html += "</table>";
-    }
-    if (rejected.length) {
-      html += `<h4 style='margin-top:10px'>Verworfen (${d.trace.rejected.length})</h4><ul style="font-size:12px">`;
-      for (const r of rejected) html += `<li>${esc(r.model_id)} — <span style="color:var(--warn)">${esc(r.reason)}</span></li>`;
-      html += "</ul>";
-    }
-    $("#traceContent").innerHTML = html;
-    $("#traceBox").style.display = "block";
+    lastTrace = d;
+    renderTrace(d);
   } catch {}
+}
+function renderTrace(d) {
+  const ranked = (d.trace?.ranked || []).slice(0, 5);
+  const rejected = (d.trace?.rejected || []).slice(0, 8);
+  let html = `<b>${esc(d.profile)}</b> → <b style="color:var(--accent)">${esc(d.winner)}</b> <span class="badge">${esc(d.winner_backend)}</span>\n`;
+  html += `<div class="detail-grid">
+    <span><span class="lbl">${t("trace.candidates")}</span> ${d.trace?.total_candidates ?? "—"}</span>
+    <span><span class="lbl">${t("trace.weights")}</span> ${Object.entries(d.weights||{}).map(([k,v])=>`${k} ${(v*100).toFixed(0)}%`).join(" · ")}</span>
+  </div>`;
+  if (ranked.length) {
+    html += `<h4 style='margin-top:10px'>${t("trace.ranking")}</h4><table><tr><th>${t("trace.colModel")}</th><th class='num'>${t("trace.colScore")}</th><th class='num'>${t("trace.colCost")}</th><th class='num'>${t("trace.colLat")}</th><th class='num'>${t("trace.colCtx")}</th><th class='num'>${t("trace.colPref")}</th><th class='num'>${t("trace.colQual")}</th></tr>`;
+    for (const r of ranked) html += `<tr><td>${esc(r.model_id)}</td><td class='num'>${r.score.toFixed(3)}</td><td class='num'>${fmtUsd(r.expected_cost_usd)}</td><td class='num'>${r.used_p95_ms}</td><td class='num'>${r.context_score.toFixed(2)}</td><td class='num'>${r.preference_score.toFixed(2)}</td><td class='num'>${r.quality_score.toFixed(2)}</td></tr>`;
+    html += "</table>";
+  }
+  if (rejected.length) {
+    html += `<h4 style='margin-top:10px'>${t("trace.rejected")} (${d.trace.rejected.length})</h4><ul style="font-size:12px">`;
+    for (const r of rejected) html += `<li>${esc(r.model_id)} — <span style="color:var(--warn)">${esc(r.reason)}</span></li>`;
+    html += "</ul>";
+  }
+  $("#traceContent").innerHTML = html;
+  $("#traceBox").style.display = "block";
 }
 $("#sendBtn").onclick = doSend;
 $("#sendBtn2").onclick = doSend;
@@ -513,64 +708,72 @@ $("#temp").oninput = () => $("#tempOut").textContent = $("#temp").value;
 $("#explainBtn").onclick = async () => {
   $("#explainErr").textContent = "";
   const out = $("#explainResult");
-  out.innerHTML = '<div class="loading">Analysiere…</div>';
+  out.innerHTML = '<div class="loading">' + t("explain.analyzing") + '</div>';
   try {
     const headers = { "Content-Type": "application/json" };
     const prof = $("#explainProfile").value;
     if (prof && prof !== "default") headers["x-route-profile"] = prof;
-    let body; try { body = JSON.parse($("#explainBody").value); } catch (e) { throw new Error("Ungültiges JSON: " + e.message); }
+    let body; try { body = JSON.parse($("#explainBody").value); } catch (e) { throw new Error(t("explain.invalidJson") + " " + e.message); }
     const d = await api("/v1/explain", { method: "POST", headers, body: JSON.stringify(body) });
-    const ranked = d.trace?.ranked || [];
-    const rejected = d.trace?.rejected || [];
-    let html = `<div class="detail-grid">
-      <span><span class="lbl">Profil:</span> ${esc(d.profile)}</span>
-      <span><span class="lbl">Winner:</span> <b style="color:var(--accent)">${esc(d.winner)}</b> <span class="badge">${esc(d.winner_backend)}</span></span>
-      <span><span class="lbl">Kandidaten gesamt:</span> ${d.trace?.total_candidates ?? "—"}</span>
-      <span><span class="lbl">Prompts (geschätzt):</span> ${fmtNum(d.request?.prompt_tokens_est)}</span>
-      <span><span class="lbl">Gewichtung:</span> ${Object.entries(d.weights||{}).map(([k,v])=>`${k} ${(v*100).toFixed(0)}%`).join(" · ")}</span>
-      <span><span class="lbl">Caps benötigt:</span> ${(d.request?.required_caps||[]).join(", ") || "—"} · ${(d.request?.required_modalities||[]).join(", ") || "—"}</span>
-    </div>`;
-    if (ranked.length) {
-      html += "<h4 style='margin-top:12px'>Ranking</h4><table><tr><th>Modell</th><th class='num'>Score</th><th class='num'>Kosten $</th><th class='num'>Lat.</th><th class='num'>Ctx</th><th class='num'>Präf.</th><th class='num'>Qual.</th></tr>";
-      for (const r of ranked) html += `<tr><td>${esc(r.model_id)}</td><td class='num'>${r.score.toFixed(3)}</td><td class='num'>${fmtUsd(r.expected_cost_usd)}</td><td class='num'>${r.used_p95_ms}</td><td class='num'>${r.context_score.toFixed(2)}</td><td class='num'>${r.preference_score.toFixed(2)}</td><td class='num'>${r.quality_score.toFixed(2)}</td></tr>`;
-      html += "</table>";
-    }
-    if (rejected.length) {
-      html += `<h4 style='margin-top:12px'>Verworfen (${rejected.length})</h4><ul style="font-size:12px; max-height:200px; overflow:auto">`;
-      for (const r of rejected) html += `<li>${esc(r.model_id)} — <span style="color:var(--warn)">${esc(r.reason)}</span></li>`;
-      html += "</ul>";
-    }
-    out.innerHTML = html;
+    lastExplain = d;
+    renderExplain(d);
   } catch (e) { out.innerHTML = ""; $("#explainErr").textContent = e.message; }
 };
+function renderExplain(d) {
+  const ranked = d.trace?.ranked || [];
+  const rejected = d.trace?.rejected || [];
+  let html = `<div class="detail-grid">
+    <span><span class="lbl">${t("explain.profileLbl")}</span> ${esc(d.profile)}</span>
+    <span><span class="lbl">${t("explain.winner")}</span> <b style="color:var(--accent)">${esc(d.winner)}</b> <span class="badge">${esc(d.winner_backend)}</span></span>
+    <span><span class="lbl">${t("explain.candidates")}</span> ${d.trace?.total_candidates ?? "—"}</span>
+    <span><span class="lbl">${t("explain.promptEst")}</span> ${fmtNum(d.request?.prompt_tokens_est)}</span>
+    <span><span class="lbl">${t("explain.weights")}</span> ${Object.entries(d.weights||{}).map(([k,v])=>`${k} ${(v*100).toFixed(0)}%`).join(" · ")}</span>
+    <span><span class="lbl">${t("explain.caps")}</span> ${(d.request?.required_caps||[]).join(", ") || "—"} · ${(d.request?.required_modalities||[]).join(", ") || "—"}</span>
+  </div>`;
+  if (ranked.length) {
+    html += `<h4 style='margin-top:12px'>${t("explain.ranking")}</h4><table><tr><th>${t("trace.colModel")}</th><th class='num'>${t("trace.colScore")}</th><th class='num'>${t("trace.colCost")}</th><th class='num'>${t("trace.colLat")}</th><th class='num'>${t("trace.colCtx")}</th><th class='num'>${t("trace.colPref")}</th><th class='num'>${t("trace.colQual")}</th></tr>`;
+    for (const r of ranked) html += `<tr><td>${esc(r.model_id)}</td><td class='num'>${r.score.toFixed(3)}</td><td class='num'>${fmtUsd(r.expected_cost_usd)}</td><td class='num'>${r.used_p95_ms}</td><td class='num'>${r.context_score.toFixed(2)}</td><td class='num'>${r.preference_score.toFixed(2)}</td><td class='num'>${r.quality_score.toFixed(2)}</td></tr>`;
+    html += "</table>";
+  }
+  if (rejected.length) {
+    html += `<h4 style='margin-top:12px'>${t("explain.rejected")} (${rejected.length})</h4><ul style="font-size:12px; max-height:200px; overflow:auto">`;
+    for (const r of rejected) html += `<li>${esc(r.model_id)} — <span style="color:var(--warn)">${esc(r.reason)}</span></li>`;
+    html += "</ul>";
+  }
+  $("#explainResult").innerHTML = html;
+}
 
 /* ---------- Usage ---------- */
-function renderKpis(el, t) {
+function renderKpis(el, td) {
   el.innerHTML = `
-    <div class="kpi"><div class="v">${fmtNum(t?.count)}</div><div class="k">Aufrufe</div></div>
-    <div class="kpi"><div class="v">${fmtNum(t?.tokens_out)}</div><div class="k">Output-Tokens</div></div>
-    <div class="kpi"><div class="v">${(t?.tokens_per_sec ?? 0).toFixed(1)}</div><div class="k">tok/s</div></div>
-    <div class="kpi"><div class="v">${fmtCost(t?.cost_usd)}</div><div class="k">Kosten</div></div>`;
+    <div class="kpi"><div class="v">${fmtNum(td?.count)}</div><div class="k">${t("usage.calls")}</div></div>
+    <div class="kpi"><div class="v">${fmtNum(td?.tokens_out)}</div><div class="k">${t("usage.tokensOut")}</div></div>
+    <div class="kpi"><div class="v">${(td?.tokens_per_sec ?? 0).toFixed(1)}</div><div class="k">${t("usage.tps")}</div></div>
+    <div class="kpi"><div class="v">${fmtCost(td?.cost_usd)}</div><div class="k">${t("usage.cost")}</div></div>`;
 }
 async function loadUsage() {
   try {
     const d = await api("/v1/transactions?limit=50");
-    renderKpis($("#kpiSession"), d.totals_session);
-    renderKpis($("#kpiToday"), d.totals_today_utc);
-    $("#txBody").innerHTML = (d.recent || []).map(t => `<tr>
-      <td>${new Date(t.unix_ts * 1000).toLocaleString("de-DE")}</td>
-      <td><span class="badge">${esc(t.api)}</span></td>
-      <td>${esc(t.profile)}</td>
-      <td>${esc(t.backend)}</td>
-      <td title="${esc(t.model_id)}">${esc(t.model_id)}</td>
-      <td class="num">${fmtMs(t.duration_ms)}</td>
-      <td class="num">${fmtNum(t.tokens_out)}</td>
-      <td class="num">${fmtCost(t.cost_usd)}</td>
-    </tr>`).join("") || `<tr><td colspan="8" class="hint">Noch keine Aufrufe in dieser Session.</td></tr>`;
+    lastUsage = d;
+    renderUsage(d);
   } catch (e) { $("#txBody").innerHTML = `<tr><td colspan="8" class="error">${esc(e.message)}</td></tr>`; }
 }
+function renderUsage(d) {
+  renderKpis($("#kpiSession"), d.totals_session);
+  renderKpis($("#kpiToday"), d.totals_today_utc);
+  $("#txBody").innerHTML = (d.recent || []).map(t => `<tr>
+    <td>${new Date(t.unix_ts * 1000).toLocaleString(localeOf())}</td>
+    <td><span class="badge">${esc(t.api)}</span></td>
+    <td>${esc(t.profile)}</td>
+    <td>${esc(t.backend)}</td>
+    <td title="${esc(t.model_id)}">${esc(t.model_id)}</td>
+    <td class="num">${fmtMs(t.duration_ms)}</td>
+    <td class="num">${fmtNum(t.tokens_out)}</td>
+    <td class="num">${fmtCost(t.cost_usd)}</td>
+  </tr>`).join("") || `<tr><td colspan="8" class="hint">${t("usage.empty")}</td></tr>`;
+}
 
-/* ---------- Logs (loguru-Stil) ---------- */
+/* ---------- Logs (loguru style) ---------- */
 const LOG_PALETTES = {
   dark:  { TRACE: "#8b949e", DEBUG: "#79c0ff", INFO: "#3fb950", WARNING: "#d29922", ERROR: "#f85149" },
   light: { TRACE: "#59636e", DEBUG: "#0969da", INFO: "#1a7f37", WARNING: "#9a6700", ERROR: "#cf222e" },
@@ -609,8 +812,8 @@ function renderLogs() {
   const filtered = visibleLogs();
   box.innerHTML = filtered.length
     ? filtered.map(loguruLine).join("\n")
-    : '<span style="color:var(--dim)">(keine Einträge für diesen Filter)</span>';
-  $("#logCount").textContent = `${logCache.length} Einträge · ${filtered.length} gefiltert`;
+    : '<span style="color:var(--dim)">' + t("logs.empty") + '</span>';
+  $("#logCount").textContent = `${logCache.length} ${t("logs.entries")} · ${filtered.length} ${t("logs.filtered")}`;
   if (atBottom) box.scrollTop = box.scrollHeight;
 }
 async function refreshLogs() {
@@ -628,7 +831,7 @@ $("#logLevel").onchange = renderLogs;
 $("#logSearch").oninput = renderLogs;
 $("#logPause").onclick = () => {
   logsPaused = !logsPaused;
-  $("#logPause").textContent = logsPaused ? "▶ Weiter" : "⏸ Pause";
+  $("#logPause").textContent = logsPaused ? t("logs.resume") : t("logs.pause");
   if (!logsPaused) refreshLogs();
 };
 $("#logClear").onclick = async () => {
@@ -639,12 +842,13 @@ $("#logCopy").onclick = async () => {
   const txt = visibleLogs().map(loguruPlain).join("\n");
   try {
     await navigator.clipboard.writeText(txt);
-    $("#logCopy").textContent = "✓ Kopiert";
-    setTimeout(() => $("#logCopy").textContent = "📋 Kopieren", 1500);
+    $("#logCopy").textContent = t("logs.copied");
+    setTimeout(() => $("#logCopy").textContent = t("logs.copy"), 1500);
   } catch {}
 };
 setInterval(() => { if ($("#tab-logs").classList.contains("active")) refreshLogs(); }, 1500);
 
+applyLang();
 loadProfiles();
 loadModels();
 loadUsage();
