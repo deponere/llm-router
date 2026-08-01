@@ -72,6 +72,103 @@ pub async fn logs_clear(State(state): State<AppState>) -> Json<Value> {
     Json(json!({ "cleared": cleared }))
 }
 
+/// `GET /v1/admin/keys` — konfigurierte API-Keys (Hash nur maskiert).
+pub async fn admin_keys(State(state): State<AppState>) -> Json<Value> {
+    let keys: Vec<Value> = state
+        .config
+        .auth
+        .keys
+        .iter()
+        .map(|k| {
+            json!({
+                "name": k.name,
+                "hash_prefix": k.hash.chars().take(16).collect::<String>() + "…",
+                "daily_budget_usd": k.daily_budget_usd,
+                "monthly_budget_usd": k.monthly_budget_usd,
+            })
+        })
+        .collect();
+    Json(json!({ "enabled": state.config.auth.enabled, "allow_ui": state.config.auth.allow_ui, "keys": keys }))
+}
+
+/// `POST /v1/admin/keys` — erzeugt einen neuen Key (Plaintext wird GENAU EINMAL zurückgegeben),
+/// schreibt `auth.keys` per toml_edit in die Config und aktiviert auth.
+pub async fn admin_keys_create(
+    State(state): State<AppState>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    let name = body.get("name").and_then(|v| v.as_str()).map(|s| s.trim().to_string());
+    let Some(name) = name.filter(|s| !s.is_empty()) else {
+        return Err(ApiError::BadRequest("name erforderlich".into()));
+    };
+    let daily = body.get("daily_budget_usd").and_then(|v| v.as_f64());
+    let monthly = body.get("monthly_budget_usd").and_then(|v| v.as_f64());
+    let (plain, hash) = crate::auth::generate_key();
+    let path = &*state.config_path;
+    let mut doc = crate::configedit::ConfigEditor::load(path)
+        .map_err(|e| ApiError::Internal(format!("config read: {e}")))?;
+    crate::configedit::ConfigEditor::add_auth_key(&mut doc, &name, &hash, daily, monthly)
+        .map_err(|e| ApiError::BadRequest(e))?;
+    crate::configedit::ConfigEditor::save(path, &doc)
+        .map_err(|e| ApiError::Internal(format!("config write: {e}")))?;
+    tracing::info!(name, "created api key (plaintext shown once)");
+    Ok(Json(json!({
+        "name": name,
+        "key": plain,
+        "warning": "Speichere den Key jetzt — er wird nur dieses eine Mal angezeigt.",
+        "restart_required": true,
+    })))
+}
+
+/// `POST /v1/admin/keys/remove` — entfernt einen Key aus der Config.
+pub async fn admin_keys_remove(
+    State(state): State<AppState>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let path = &*state.config_path;
+    let mut doc = crate::configedit::ConfigEditor::load(path)
+        .map_err(|e| ApiError::Internal(format!("config read: {e}")))?;
+    let removed = crate::configedit::ConfigEditor::remove_auth_key(&mut doc, name)
+        .map_err(|e| ApiError::BadRequest(e))?;
+    if !removed {
+        return Err(ApiError::BadRequest(format!("Key '{name}' nicht gefunden")));
+    }
+    crate::configedit::ConfigEditor::save(path, &doc)
+        .map_err(|e| ApiError::Internal(format!("config write: {e}")))?;
+    tracing::info!(name, "removed api key");
+    Ok(Json(json!({ "removed": name, "restart_required": true })))
+}
+
+/// `POST /v1/admin/config` — setzt einen verschachtelten Config-Wert (dotted key)
+/// per toml_edit; wirksam nach Neustart. Body: `{"set": {"alerts.webhook_url": "…"}}`.
+pub async fn admin_config_set(
+    State(state): State<AppState>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    let sets = body.get("set").and_then(|v| v.as_object()).cloned().unwrap_or_default();
+    if sets.is_empty() {
+        return Err(ApiError::BadRequest("leeres `set`-Objekt".into()));
+    }
+    let path = &*state.config_path;
+    let mut doc = crate::configedit::ConfigEditor::load(path)
+        .map_err(|e| ApiError::Internal(format!("config read: {e}")))?;
+    for (k, v) in &sets {
+        let value = match v {
+            Value::String(s) => s.clone(),
+            Value::Number(n) => n.to_string(),
+            Value::Bool(b) => b.to_string(),
+            other => return Err(ApiError::BadRequest(format!("Wert für '{k}' nicht unterstützt: {other}"))),
+        };
+        crate::configedit::ConfigEditor::set(&mut doc, k, &value)
+            .map_err(|e| ApiError::BadRequest(e))?;
+        tracing::info!(key = %k, "config value updated");
+    }
+    crate::configedit::ConfigEditor::save(path, &doc)
+        .map_err(|e| ApiError::Internal(format!("config write: {e}")))?;
+    Ok(Json(json!({ "updated": sets.keys().collect::<Vec<_>>(), "restart_required": true })))
+}
+
 /// `GET /v1/transactions` — aktuelle Session-Summe + letzte Aufrufe fürs Widget, optional `?limit=N` (default 10).
 pub async fn transactions(
     State(state): State<AppState>,
@@ -80,6 +177,42 @@ pub async fn transactions(
     let limit = q.get("limit").and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
     let snap = state.history.snapshot(limit);
     Json(serde_json::to_value(snap).unwrap_or_else(|_| serde_json::json!({})))
+}
+
+/// `GET /v1/stats` — persistente Tages-Serie aus SQLite fürs Kosten-Dashboard.
+/// Query: `days` (default 30), `key` (optionaler API-Key-Name).
+pub async fn stats(
+    State(state): State<AppState>,
+    axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Json<Value> {
+    let days = q.get("days").and_then(|s| s.parse::<f64>().ok()).unwrap_or(30.0).min(365.0);
+    let key = q.get("key").filter(|s| !s.is_empty()).map(|s| s.to_string());
+    let from = crate::history::now_unix() as f64 - days * 86_400.0;
+    let series = state.store.series(from, key.as_deref());
+    let total_cost: f64 = series.iter().map(|p| p.cost_usd).sum();
+    let total_calls: i64 = series.iter().map(|p| p.count).sum();
+    Json(json!({
+        "days": days,
+        "from_unix": from,
+        "total_cost_usd": total_cost,
+        "total_calls": total_calls,
+        "series": series,
+    }))
+}
+
+/// `GET /v1/breakdown` — Kosten-/Aufruf-Summen gruppiert nach Spalte.
+/// Query: `days` (default 7), `by` = `profile|backend|model|key`, `limit` (default 10), `key`.
+pub async fn breakdown(
+    State(state): State<AppState>,
+    axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Json<Value> {
+    let days = q.get("days").and_then(|s| s.parse::<f64>().ok()).unwrap_or(7.0).min(365.0);
+    let by = q.get("by").map(|s| s.to_string()).unwrap_or_else(|| "backend".into());
+    let limit = q.get("limit").and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
+    let key = q.get("key").filter(|s| !s.is_empty()).map(|s| s.to_string());
+    let from = crate::history::now_unix() as f64 - days * 86_400.0;
+    let rows = state.store.breakdown(from, &by, key.as_deref(), limit);
+    Json(json!({ "by": by, "days": days, "rows": rows }))
 }
 
 /// `GET /v1/intelligence` — Bewertungs-Übersicht pro Router-Modell, mergt Katalog mit Artificial-Analysis-Scores; Query: `sort`, `min_intelligence`, `backend`, `limit`, `unrated`.

@@ -37,6 +37,9 @@ bytes = "1"
 parking_lot = "0.12"
 moka = { version = "0.12", features = ["future"] }
 uuid = { version = "1", features = ["v4"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+sha2 = "0.10"
+toml_edit = "0.22"
 dotenvy = "0.15"
 
 [profile.release]

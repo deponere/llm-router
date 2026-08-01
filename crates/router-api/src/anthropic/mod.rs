@@ -23,14 +23,15 @@ pub async fn messages(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Response, ApiError> {
-    let (profile_hdr, privacy_hdr) = headers_to_hints(&headers);
+    let (profile_hint, privacy_hint) = headers_to_hints(&headers);
+    let key_name = crate::auth::lookup_key(&headers, &state.config);
     state.rotator.maybe_rotate().await;
     let mut norm = anthropic_to_norm(&body)?;
     if norm.profile_hint.is_none() {
-        norm.profile_hint = profile_hdr.clone();
+        norm.profile_hint = profile_hint.clone();
     }
-    if privacy_hdr.is_some() {
-        norm.privacy_tag = parse_privacy_tag(privacy_hdr.as_deref());
+    if privacy_hint.is_some() {
+        norm.privacy_tag = parse_privacy_tag(privacy_hint.as_deref());
     }
     norm.detect_required();
     resolve_auto_alias(&mut norm, &state.config);
@@ -71,6 +72,21 @@ pub async fn messages(
             cost_usd: acc.cost,
             tokens_out: acc.completion_tokens.unwrap_or(0),
         });
+        let _ = state.store.insert(
+            &crate::history::Transaction {
+                unix_ts: now_unix(),
+                api: "anthropic".into(),
+                profile: profile.name.clone(),
+                backend: winner.backend_id.clone(),
+                model_id: winner.id.clone(),
+                duration_ms: elapsed.as_millis() as u64,
+                cost_usd: acc.cost,
+                tokens_out: acc.completion_tokens.unwrap_or(0),
+            },
+            key_name.as_deref(),
+            acc.prompt_tokens.unwrap_or(0),
+            None,
+        );
         let body = anthropic_body_from(&acc, &winner.id);
         return Ok(Json(body).into_response());
     }
@@ -78,6 +94,7 @@ pub async fn messages(
     // Stream: OpenAI-SSE -> Anthropic-Events
     let tracker = state.tracker.clone();
     let history = state.history.clone();
+    let store = state.store.clone();
     let profile_name = profile.name.clone();
     let model_for_event = winner.id.clone();
     let model_for_log = winner.id.clone();
@@ -88,13 +105,28 @@ pub async fn messages(
         history.record(crate::history::Transaction {
             unix_ts: now_unix(),
             api: "anthropic".into(),
-            profile: profile_name,
+            profile: profile_name.clone(),
             backend: backend_id.clone(),
             model_id: model_for_log.clone(),
             duration_ms: elapsed.as_millis() as u64,
             cost_usd: cost,
             tokens_out,
         });
+        let _ = store.insert(
+            &crate::history::Transaction {
+                unix_ts: now_unix(),
+                api: "anthropic".into(),
+                profile: profile_name,
+                backend: backend_id.clone(),
+                model_id: model_for_log.clone(),
+                duration_ms: elapsed.as_millis() as u64,
+                cost_usd: cost,
+                tokens_out,
+            },
+            key_name.as_deref(),
+            0,
+            None,
+        );
     });
 
     Ok(Sse::new(event_stream).keep_alive(KeepAlive::default()).into_response())

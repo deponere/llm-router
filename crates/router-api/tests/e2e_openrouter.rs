@@ -49,9 +49,11 @@ async fn start_app(mock_url: String) -> (tokio::task::JoinHandle<()>, String) {
     let registry = RegistryHandle::new(&cfg, tracker.clone());
     let state = AppState {
         config: Arc::new(cfg),
+        config_path: Arc::new(std::path::PathBuf::from("config/router.toml")),
         registry: Arc::new(registry),
         tracker,
         history: router_api::history::TransactionHistory::new(),
+        store: router_api::store::Store::default(),
         rotator: Arc::new(router_api::rotate::Rotator::from_env()),
         logs: router_api::logbuf::LogBuffer::new(100),
     };

@@ -116,7 +116,7 @@ pub fn now_unix() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
-fn unix_utc_day_start() -> u64 {
+pub fn unix_utc_day_start() -> u64 {
     let now = now_unix();
     now - (now % 86_400)
 }

@@ -64,6 +64,7 @@ pub async fn chat_completions(
     Json(body): Json<Value>,
 ) -> Result<Response, ApiError> {
     let (profile_hdr, privacy_hdr) = headers_to_hints(&headers);
+    let key_name = crate::auth::lookup_key(&headers, &state.config);
     state.rotator.maybe_rotate().await;
     let mut norm = openai_to_norm(&body)?;
     if norm.profile_hint.is_none() {
@@ -83,7 +84,7 @@ pub async fn chat_completions(
     let (profile, decision) = decide_for(&norm, &state.config, &snap)?;
     announce_decision("openai", &profile, &decision, &norm);
 
-    dispatch_openai(state, profile, decision, norm, body).await
+    dispatch_openai(state, profile, decision, norm, body, key_name).await
 }
 
 /// A synthetic `/v1/models` entry that maps to auto-routing.
@@ -104,6 +105,7 @@ async fn dispatch_openai(
     decision: router_core::Decision,
     norm: NormRequest,
     original_body: Value,
+    key_name: Option<String>,
 ) -> Result<Response, ApiError> {
     let stream = norm.stream;
     let started = Instant::now();
@@ -117,6 +119,8 @@ async fn dispatch_openai(
             byte_stream,
             state.tracker.clone(),
             state.history.clone(),
+            state.store.clone(),
+            key_name,
             profile.name.clone(),
             winner.backend_id.clone(),
             winner.id.clone(),
@@ -141,6 +145,21 @@ async fn dispatch_openai(
             cost_usd: cost,
             tokens_out: acc.completion_tokens.unwrap_or(0),
         });
+        let _ = state.store.insert(
+            &crate::history::Transaction {
+                unix_ts: now_unix(),
+                api: "openai".into(),
+                profile: profile.name.clone(),
+                backend: winner.backend_id.clone(),
+                model_id: winner.id.clone(),
+                duration_ms: elapsed.as_millis() as u64,
+                cost_usd: cost,
+                tokens_out: acc.completion_tokens.unwrap_or(0),
+            },
+            key_name.as_deref(),
+            acc.prompt_tokens.unwrap_or(0),
+            None,
+        );
         let aggregated = aggregate_openai_sse(&acc, &winner.id);
         Ok(Json(aggregated).into_response())
     }
@@ -150,6 +169,8 @@ fn sse_from_bytes<S>(
     inner: S,
     tracker: router_providers::LatencyTracker,
     history: crate::history::TransactionHistory,
+    store: crate::store::Store,
+    key_name: Option<String>,
     profile_name: String,
     backend_id: String,
     model_id: String,
@@ -204,13 +225,28 @@ where
         history.record(crate::history::Transaction {
             unix_ts: now_unix(),
             api: "openai".into(),
-            profile: profile_name,
+            profile: profile_name.clone(),
             backend: backend_id.clone(),
             model_id: model_id.clone(),
             duration_ms: elapsed.as_millis() as u64,
             cost_usd: cost,
             tokens_out,
         });
+        let _ = store.insert(
+            &crate::history::Transaction {
+                unix_ts: now_unix(),
+                api: "openai".into(),
+                profile: profile_name,
+                backend: backend_id.clone(),
+                model_id: model_id.clone(),
+                duration_ms: elapsed.as_millis() as u64,
+                cost_usd: cost,
+                tokens_out,
+            },
+            key_name.as_deref(),
+            0,
+            None,
+        );
         // SSE-Comment (`: ...`) statt `data:`-Event, damit kein Client es als JSON fehlinterpretiert — `data: [DONE]` kam schon vom Upstream.
         Ok(Event::default().comment("done"))
     }))

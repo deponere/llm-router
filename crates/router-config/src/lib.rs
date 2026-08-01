@@ -22,11 +22,105 @@ pub struct Config {
     pub registry: RegistryConfig,
     #[serde(default)]
     pub profiles: BTreeMap<String, Profile>,
+    /// Optionaler Schutz der LLM-Endpoints (API-Keys + Budgets).
+    #[serde(default)]
+    pub auth: ServerAuthConfig,
+    /// Persistente Nutzungshistorie (SQLite).
+    #[serde(default)]
+    pub storage: StorageConfig,
+    /// Webhook-/Telegram-Benachrichtigungen.
+    #[serde(default)]
+    pub alerts: AlertsConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServerConfig {
     pub bind: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct ServerAuthConfig {
+    /// `true` = LLM-Endpoints verlangen `x-api-key` (bzw. Bearer) eines konfigurierten Keys.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Web-UI (localhost) bleibt als Admin-Surface ohne Key erreichbar.
+    #[serde(default = "default_true")]
+    pub allow_ui: bool,
+    /// Konfigurierte Schlüssel — nur SHA-256-Hashes, nie Plaintext.
+    #[serde(default)]
+    pub keys: Vec<AuthKey>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthKey {
+    pub name: String,
+    /// `sha256:<hex>` des Plaintext-Keys (`rk_…`).
+    pub hash: String,
+    /// USD-Budget pro UTC-Tag (optional).
+    #[serde(default)]
+    pub daily_budget_usd: Option<f64>,
+    /// USD-Budget pro UTC-Monat (optional).
+    #[serde(default)]
+    pub monthly_budget_usd: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct StorageConfig {
+    /// Pfad zur SQLite-Datenbank; relativ wird gegen das Config-Verzeichnis aufgelöst.
+    #[serde(default = "default_db_path")]
+    pub db_path: String,
+    /// Aufbewahrungsdauer der Transactions in Tagen (alter als das wird beim Start gelöscht; 0 = nie).
+    #[serde(default = "default_retention_days")]
+    pub retention_days: u32,
+}
+
+fn default_db_path() -> String { "data/router.sqlite".into() }
+fn default_retention_days() -> u32 { 90 }
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct AlertsConfig {
+    /// Optionaler generischer Webhook (POST JSON `{event, message, ts, level}`).
+    #[serde(default)]
+    pub webhook_url: String,
+    /// Env-Var, die das Telegram-Bot-Token hält; leer = Telegram aus.
+    #[serde(default = "default_telegram_token_env")]
+    pub telegram_token_env: String,
+    /// Numerische Chat-ID für sendMessage.
+    #[serde(default)]
+    pub telegram_chat_id: String,
+    /// USD-Schwelle: wenn die UTC-Tagessumme sie überschreitet, einmal täglich alerten. 0 = aus.
+    #[serde(default)]
+    pub daily_cost_threshold_usd: f64,
+    #[serde(default)]
+    pub events: AlertEvents,
+}
+
+fn default_telegram_token_env() -> String { "TELEGRAM_BOT_TOKEN".into() }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AlertEvents {
+    #[serde(default = "default_true")]
+    pub rotation_failed: bool,
+    #[serde(default)]
+    pub rotation_succeeded: bool,
+    #[serde(default = "default_true")]
+    pub backend_down: bool,
+    #[serde(default = "default_true")]
+    pub balance_low: bool,
+    #[serde(default = "default_true")]
+    pub daily_cost_threshold: bool,
+}
+
+impl Default for AlertEvents {
+    fn default() -> Self {
+        Self {
+            rotation_failed: true,
+            rotation_succeeded: false,
+            backend_down: true,
+            balance_low: true,
+            daily_cost_threshold: true,
+        }
+    }
 }
 
 /// Alle konfigurierten Backend-Instanzen, Key = Backend-ID (z. B. "openai", "groq", "anthropic"); dient als `backend_id` für Dispatch und Metrics.
@@ -53,7 +147,29 @@ pub struct BackendConfig {
     /// Nur `kind = "anthropic"`: `anthropic-version`-Header (Default 2023-06-01).
     #[serde(default)]
     pub anthropic_version: Option<String>,
+    /// Optionaler Balance-Watchdog (z. B. DeepSeek: GET /user/balance). 
+    #[serde(default)]
+    pub watchdog: Option<WatchdogConfig>,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WatchdogConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Balance-Schwelle; Währung siehe `balance_currency`.
+    #[serde(default = "default_min_balance")]
+    pub min_balance: f64,
+    /// Währung, in der die API die Balance liefert („USD" = Dollar, sonst z. B. „CNY").
+    #[serde(default = "default_balance_currency")]
+    pub balance_currency: String,
+    /// Prüfintervall in Sekunden (zählt nur bei fälligen Router-Checks, d. h. bei Requests).
+    #[serde(default = "default_watchdog_interval")]
+    pub check_interval_secs: u64,
+}
+
+fn default_min_balance() -> f64 { 10.0 }
+fn default_balance_currency() -> String { "USD".into() }
+fn default_watchdog_interval() -> u64 { 3600 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]

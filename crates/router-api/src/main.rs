@@ -25,11 +25,14 @@ async fn main() -> anyhow::Result<()> {
 
     let tracker = LatencyTracker::new();
     let registry = RegistryHandle::new(&config, tracker.clone());
+    let store = open_store(&cfg_path, &config)?;
     let state = AppState {
         config: Arc::new(config),
+        config_path: Arc::new(std::path::PathBuf::from(&cfg_path)),
         registry: Arc::new(registry),
         tracker,
         history: router_api::history::TransactionHistory::new(),
+        store,
         rotator: Arc::new(Rotator::from_env()),
         logs: logbuf,
     };
@@ -40,6 +43,31 @@ async fn main() -> anyhow::Result<()> {
     let listener = bind_with_retry(bind).await?;
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+/// Öffnet den SQLite-Store; relative `db_path`-Angaben werden gegen das Config-Verzeichnis
+/// aufgelöst. Beim Start wird die Retention-Säuberung ausgeführt.
+fn open_store(cfg_path: &str, config: &Config) -> anyhow::Result<router_api::store::Store> {
+    let db_path = if std::path::Path::new(&config.storage.db_path).is_absolute() {
+        std::path::PathBuf::from(&config.storage.db_path)
+    } else {
+        let dir = std::path::Path::new(cfg_path)
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."));
+        dir.join(&config.storage.db_path)
+    };
+    tracing::info!(path = %db_path.display(), "opening sqlite store");
+    let store = router_api::store::Store::open(&db_path)
+        .map_err(|e| anyhow::anyhow!("sqlite open failed: {e}"))?;
+    if config.storage.retention_days > 0 {
+        let cutoff =
+            router_api::history::now_unix() as f64 - (config.storage.retention_days as f64 * 86_400.0);
+        let n = store.purge(cutoff);
+        if n > 0 {
+            tracing::info!(n, "purged old transactions (retention)");
+        }
+    }
+    Ok(store)
 }
 
 /// Bindet mit kurzem Retry — nötig nach `POST /v1/admin/restart`: der neue
