@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM Router · Web-Interface</title>
+<style>
+  :root {
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#2d333b;
+    --text:#e6edf3; --dim:#8b949e; --accent:#3fb950; --accent2:#58a6ff;
+    --warn:#d29922; --err:#f85149; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  header { display:flex; align-items:center; gap:16px; padding:10px 20px; background:var(--panel); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:10; }
+  header h1 { font-size:16px; font-weight:600; }
+  header h1 span { color:var(--accent); }
+  header .status { margin-left:auto; font-size:12px; color:var(--dim); display:flex; gap:16px; align-items:center; }
+  header .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); display:inline-block; }
+  header .dot.ok { background:var(--accent); }
+  header .dot.err { background:var(--err); }
+  nav { display:flex; gap:4px; padding:8px 20px 0; background:var(--panel); border-bottom:1px solid var(--border); }
+  nav button { background:none; border:none; color:var(--dim); padding:8px 14px; font-size:13px; cursor:pointer; border-bottom:2px solid transparent; }
+  nav button.active { color:var(--text); border-bottom-color:var(--accent2); }
+  main { padding:20px; max-width:1200px; margin:0 auto; }
+  .tab { display:none; }
+  .tab.active { display:block; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:16px; }
+  .card h3 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--dim); margin-bottom:12px; }
+  .grid { display:grid; gap:16px; }
+  .grid.cols-2 { grid-template-columns: 320px 1fr; }
+  @media (max-width:900px){ .grid.cols-2{ grid-template-columns:1fr; } }
+  label { display:block; font-size:12px; color:var(--dim); margin:10px 0 4px; }
+  input[type=text], input[type=number], select, textarea {
+    width:100%; background:var(--panel2); color:var(--text); border:1px solid var(--border);
+    border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit;
+  }
+  textarea { resize:vertical; min-height:60px; }
+  input[type=range] { width:100%; accent-color:var(--accent2); }
+  .range-row { display:flex; gap:10px; align-items:center; }
+  .range-row output { min-width:34px; text-align:right; font-family:var(--mono); color:var(--dim); }
+  button.primary { background:var(--accent); color:#0d1117; border:none; border-radius:6px; padding:9px 18px; font-size:13px; font-weight:600; cursor:pointer; }
+  button.primary:hover { filter:brightness(1.1); }
+  button.primary:disabled { opacity:.5; cursor:wait; }
+  button.ghost { background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:7px 12px; font-size:12px; cursor:pointer; }
+  button.ghost:hover { border-color:var(--dim); }
+  .chat { display:flex; flex-direction:column; min-height:420px; }
+  .msgs { flex:1; overflow-y:auto; max-height:520px; padding:12px; background:var(--bg); border:1px solid var(--border); border-radius:8px; display:flex; flex-direction:column; gap:10px; }
+  .msg { max-width:85%; padding:10px 14px; border-radius:10px; white-space:pre-wrap; word-break:break-word; font-size:13.5px; }
+  .msg.user { align-self:flex-end; background:var(--accent2); color:#0d1117; }
+  .msg.assistant { align-self:flex-start; background:var(--panel2); border:1px solid var(--border); }
+  .msg .meta { display:block; font-size:11px; color:var(--dim); margin-top:6px; font-family:var(--mono); }
+  .msg.user .meta { color:#0d1117; opacity:.7; }
+  .chat-input { display:flex; gap:8px; margin-top:10px; }
+  .chat-input input { flex:1; }
+  .error { color:var(--err); font-size:12px; margin-top:6px; white-space:pre-wrap; }
+  .hint { color:var(--dim); font-size:12px; margin-top:6px; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  th { color:var(--dim); font-weight:500; cursor:pointer; user-select:none; position:sticky; top:0; background:var(--panel); }
+  th:hover { color:var(--text); }
+  td.num, th.num { text-align:right; font-family:var(--mono); }
+  .search { margin-bottom:10px; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; margin-right:4px; }
+  .pill.Local{ background:#1f6feb33; color:#79c0ff; } .pill.Zdr{ background:#3fb95022; color:#3fb950; } .pill.Standard{ background:#8b949e22; color:#8b949e; }
+  .trace pre { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:10px; overflow:auto; max-height:300px; font-family:var(--mono); font-size:12px; white-space:pre-wrap; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  .kpi { background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center; }
+  .kpi .v { font-size:20px; font-weight:600; font-family:var(--mono); }
+  .kpi .k { font-size:11px; color:var(--dim); margin-top:2px; }
+  .loading { color:var(--dim); font-size:12px; padding:20px; text-align:center; }
+  .badge { font-size:11px; color:var(--dim); background:var(--panel2); border:1px solid var(--border); padding:2px 8px; border-radius:10px; }
+  details { margin-top:8px; }
+  summary { cursor:pointer; color:var(--accent2); font-size:12px; }
+  .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 20px; font-size:12.5px; margin-top:8px; }
+  .detail-grid .lbl { color:var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>LLM <span>Router</span></h1>
+  <nav id="nav">
+    <button data-tab="chat" class="active">💬 Chat</button>
+    <button data-tab="models">📦 Modelle</button>
+    <button data-tab="explain">🧭 Erklärung</button>
+    <button data-tab="usage">📊 Nutzung</button>
+    <button data-tab="logs">📜 Logs</button>
+  </nav>
+  <div class="status">
+    <span><span id="dot" class="dot"></span> <span id="apiStatus">prüfe…</span></span>
+    <span id="modelCount"></span>
+    <button class="ghost" id="restartBtn">🔄 Neu starten</button>
+  </div>
+</header>
+
+<main>
+  <!-- ============ CHAT ============ -->
+  <section class="tab active" id="tab-chat">
+    <div class="grid cols-2">
+      <div>
+        <div class="card">
+          <h3>Einstellungen</h3>
+          <label>Route-Profil</label>
+          <select id="profile"><option value="">default</option></select>
+          <label>Modell (leer = auto)</label>
+          <input type="text" id="model" placeholder="auto">
+          <label>System-Prompt</label>
+          <textarea id="sysprompt">Du bist ein hilfreicher Assistent.</textarea>
+          <label>Temperature <span id="tempVal"></span></label>
+          <div class="range-row"><input type="range" id="temp" min="0" max="2" step="0.1" value="0.7"><output id="tempOut">0.7</output></div>
+          <label>Max Tokens (leer = Modell-Default)</label>
+          <input type="number" id="maxTokens" min="1" max="200000" placeholder="—">
+          <div style="margin-top:14px"><button class="primary" id="sendBtn">Senden</button></div>
+          <div class="error" id="chatErr"></div>
+        </div>
+      </div>
+      <div class="card chat">
+        <h3>Konversation</h3>
+        <div class="msgs" id="msgs">
+          <div class="hint">Stelle eine Frage — der Router wählt das beste Modell über das Expertensystem.</div>
+        </div>
+        <div class="chat-input">
+          <input type="text" id="chatInput" placeholder="Nachricht eingeben…">
+          <button class="primary" id="sendBtn2">Senden</button>
+        </div>
+        <details id="traceBox" style="display:none">
+          <summary>Routing-Trace anzeigen</summary>
+          <div class="trace" id="traceContent"></div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MODELS ============ -->
+  <section class="tab" id="tab-models">
+    <div class="card">
+      <h3>Modell-Katalog</h3>
+      <input type="text" class="search" id="modelSearch" placeholder="Filtern (ID / Backend / Provider)…">
+      <div style="overflow:auto; max-height:65vh">
+      <table id="modelTable">
+        <thead><tr>
+          <th data-k="id">Modell</th><th data-k="backend">Backend</th><th data-k="context_length">Context</th>
+          <th data-k="price_in" class="num">In $/Mtok</th><th data-k="price_out" class="num">Out $/Mtok</th>
+          <th data-k="p95" class="num">p95 ms</th><th data-k="intel" class="num">AA-Index</th><th>Modalitäten</th><th>Caps</th><th>Privacy</th>
+        </tr></thead>
+        <tbody id="modelBody"><tr><td colspan="10" class="loading">Lade Modell-Katalog…</td></tr></tbody>
+      </table>
+      </div>
+      <div class="hint" id="modelHint"></div>
+    </div>
+  </section>
+
+  <!-- ============ EXPLAIN ============ -->
+  <section class="tab" id="tab-explain">
+    <div class="grid cols-2">
+      <div class="card">
+        <h3>Request (Dry-Run)</h3>
+        <label>Profil</label>
+        <select id="explainProfile"><option value="">default</option></select>
+        <label>Request-JSON (OpenAI-Format)</label>
+        <textarea id="explainBody" style="min-height:220px; font-family:var(--mono); font-size:12px">{
+  "model": "auto",
+  "messages": [
+    {"role": "user", "content": "Erkläre Quantenverschränkung einfach."}
+  ],
+  "max_tokens": 200
+}</textarea>
+        <div style="margin-top:10px"><button class="primary" id="explainBtn">Erklären (Dry-Run)</button></div>
+        <div class="error" id="explainErr"></div>
+      </div>
+      <div class="card">
+        <h3>Entscheidung</h3>
+        <div id="explainResult"><div class="hint">Kein Dry-Run ausgeführt. Das Expertensystem filtert und scored alle Kandidaten deterministisch.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ USAGE ============ -->
+  <section class="tab" id="tab-usage">
+    <div class="card">
+      <h3>Session</h3>
+      <div class="kpis" id="kpiSession"></div>
+    </div>
+    <div class="card">
+      <h3>Heute (UTC)</h3>
+      <div class="kpis" id="kpiToday"></div>
+    </div>
+    <div class="card">
+      <h3>Letzte Aufrufe</h3>
+      <div style="overflow:auto; max-height:50vh">
+      <table>
+        <thead><tr><th>Zeit</th><th>API</th><th>Profil</th><th>Backend</th><th>Modell</th><th class="num">Dauer</th><th class="num">Tok out</th><th class="num">Kosten</th></tr></thead>
+        <tbody id="txBody"><tr><td colspan="8" class="loading">Lade…</td></tr></tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+  <!-- ============ LOGS ============ -->
+  <section class="tab" id="tab-logs">
+    <div class="card">
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap">
+        <h3 style="margin:0; flex:1">Logs <span class="badge" id="logCount"></span></h3>
+        <label style="margin:0">Level</label>
+        <select id="logLevel" style="width:auto">
+          <option value="TRACE">TRACE</option>
+          <option value="DEBUG" selected>DEBUG</option>
+          <option value="INFO">INFO</option>
+          <option value="WARNING">WARNING</option>
+          <option value="ERROR">ERROR</option>
+        </select>
+        <input type="text" id="logSearch" placeholder="Filtern…" style="width:200px">
+        <button class="ghost" id="logPause">⏸ Pause</button>
+        <button class="ghost" id="logClear">🗑 Leeren</button>
+        <button class="ghost" id="logCopy">📋 Kopieren</button>
+      </div>
+      <div id="logBox" style="background:#0a0d12; border:1px solid var(--border); border-radius:8px; padding:12px 14px; overflow:auto; max-height:70vh; font-family:var(--mono); font-size:12px; line-height:1.7; white-space:pre-wrap"></div>
+      <div class="hint">Live-Polling (1,5 s) · In-Memory-Ringbuffer (letzte 500 Einträge) · Format wie loguru: <code>ts | LEVEL | target:line - message</code></div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+
+/* ---------- API helpers ---------- */
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) { let t = ""; try { t = await r.text(); } catch {} throw new Error(`HTTP ${r.status}: ${t.slice(0,300)}`); }
+  return r.json();
+}
+const fmtUsd = v => v == null ? "—" : "$" + Number(v).toFixed(4);
+const fmtNum = v => v == null || isNaN(v) ? "—" : Number(v).toLocaleString("de-DE");
+const fmtMs = v => v == null ? "—" : (v < 1000 ? v + " ms" : (v/1000).toFixed(2) + " s");
+const fmtCost = v => v == null ? "—" : "$" + Number(v).toFixed(6);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- Tabs ---------- */
+document.querySelectorAll("#nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("#nav button").forEach(x => x.classList.toggle("active", x === b));
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.id === "tab-" + b.dataset.tab));
+  if (b.dataset.tab === "models") loadModels();
+  if (b.dataset.tab === "usage") loadUsage();
+  if (b.dataset.tab === "logs") refreshLogs();
+});
+
+/* ---------- Status ---------- */
+async function checkStatus() {
+  try {
+    const r = await fetch("/v1/models");
+    if (r.ok) { $("#dot").className = "dot ok"; $("#apiStatus").textContent = "online"; }
+    else throw 0;
+  } catch { $("#dot").className = "dot err"; $("#apiStatus").textContent = "offline"; }
+}
+/* ---------- Neustart ---------- */
+$("#restartBtn").onclick = async () => {
+  if (!confirm("Router wirklich neu starten? Kurze Unterbrechung (~2 s).")) return;
+  const btn = $("#restartBtn");
+  btn.disabled = true; btn.textContent = "⏳ Neustart…";
+  try { await fetch("/v1/admin/restart", { method: "POST" }); } catch {}
+  const t0 = Date.now();
+  while (Date.now() - t0 < 20000) {
+    await new Promise(r => setTimeout(r, 500));
+    try {
+      const r = await fetch("/healthz", { cache: "no-store" });
+      if (r.ok) { location.reload(); return; }
+    } catch {}
+  }
+  btn.disabled = false; btn.textContent = "🔄 Neu starten";
+  alert("Router antwortet nicht — Seite neu laden?");
+};
+
+checkStatus();
+
+/* ---------- Modelle ---------- */
+let allModels = [];
+async function loadModels() {
+  const tbody = $("#modelBody");
+  try {
+    const d = await api("/v1/registry");
+    allModels = d.models || [];
+    renderModels();
+    $("#modelCount").textContent = allModels.length + " Modelle";
+    $("#modelHint").textContent = "Quelle: /v1/registry · sortieren per Klick auf Spaltenkopf";
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="10" class="error">${esc(e.message)}</td></tr>`;
+  }
+}
+let sortKey = "id", sortDir = 1;
+function renderModels() {
+  const q = $("#modelSearch").value.toLowerCase();
+  const rows = allModels
+    .filter(m => (m.id + " " + m.backend + " " + (m.provider||"")).toLowerCase().includes(q))
+    .sort((a,b) => {
+      let va, vb;
+      if (sortKey === "price_in") [va,vb]=[a.pricing.input_per_mtok_usd, b.pricing.input_per_mtok_usd];
+      else if (sortKey === "price_out") [va,vb]=[a.pricing.output_per_mtok_usd, b.pricing.output_per_mtok_usd];
+      else if (sortKey === "p95") [va,vb]=[a.measured_p95_ms ?? Infinity, b.measured_p95_ms ?? Infinity];
+      else if (sortKey === "intel") [va,vb]=[a.intelligence_index ?? -1, b.intelligence_index ?? -1];
+      else [va,vb]=[a[sortKey], b[sortKey]];
+      if (va == vb) return 0;
+      return (va > vb ? 1 : -1) * sortDir;
+    });
+  $("#modelBody").innerHTML = rows.map(m => `<tr>
+    <td title="${esc(m.id)}">${esc(m.id)}</td>
+    <td><span class="badge">${esc(m.backend)}</span></td>
+    <td class="num">${fmtNum(m.context_length)}</td>
+    <td class="num">${fmtUsd(m.pricing?.input_per_mtok_usd)}</td>
+    <td class="num">${fmtUsd(m.pricing?.output_per_mtok_usd)}</td>
+    <td class="num">${m.measured_p95_ms ?? "—"}</td>
+    <td class="num">${m.intelligence_index != null ? m.intelligence_index.toFixed(1) : "—"}</td>
+    <td>${(m.input_modalities||[]).map(x=>`<span class="pill">${x}</span>`).join("")}</td>
+    <td>${(m.capabilities||[]).map(x=>`<span class="pill">${x}</span>`).join("")}</td>
+    <td><span class="pill ${esc(m.privacy_class)}">${esc(m.privacy_class)}</span></td>
+  </tr>`).join("") || `<tr><td colspan="10" class="hint">Keine Modelle — Backend-Status prüfen.</td></tr>`;
+  $("#modelHint").textContent = `${rows.length} von ${allModels.length} Modellen · Quelle: /v1/registry · Sortierung: ${sortKey}${sortDir>0?" ↑":" ↓"}`;
+}
+$("#modelSearch").oninput = renderModels;
+document.querySelectorAll("#modelTable th").forEach(th => th.onclick = () => {
+  const k = th.dataset.k;
+  if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = 1; }
+  renderModels();
+});
+
+/* ---------- Profile laden (aus /v1/models Auto-Einträgen) ---------- */
+async function loadProfiles() {
+  try {
+    const d = await api("/v1/models");
+    const profiles = new Set();
+    for (const m of d.data || []) {
+      // Synthetische Profil-Einträge haben owned_by "router"; echte Modelle
+      // (z. B. openrouter/auto) dürfen nicht als Profil erscheinen.
+      if (m.owned_by === "router" && typeof m.id === "string" && m.id.endsWith("/auto"))
+        profiles.add(m.id.slice(0, -5));
+    }
+    const opts = ["default", ...profiles].filter((v,i,a) => a.indexOf(v) === i);
+    for (const sel of ["#profile", "#explainProfile"]) {
+      const el = $(sel);
+      el.innerHTML = opts.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
+    }
+    $("#modelCount").textContent = (d.data?.length || 0) + " Modelle";
+  } catch (e) { $("#modelCount").textContent = ""; }
+}
+
+/* ---------- Chat (SSE-Streaming) ---------- */
+let history = [];
+let streaming = false;
+
+function addMsg(role, text, meta) {
+  const box = $("#msgs");
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+  div.textContent = text;
+  if (meta) { const m = document.createElement("span"); m.className = "meta"; m.textContent = meta; div.appendChild(m); }
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+function buildBody() {
+  const msgs = [];
+  const sys = $("#sysprompt").value.trim();
+  if (sys) msgs.push({ role: "system", content: sys });
+  for (const h of history) msgs.push(h);
+  const body = { model: $("#model").value.trim() || "auto", messages: msgs, stream: true, temperature: parseFloat($("#temp").value) };
+  const mt = parseInt($("#maxTokens").value, 10);
+  if (mt > 0) body.max_tokens = mt;
+  return body;
+}
+
+async function doSend() {
+  if (streaming) return;
+  const text = $("#chatInput").value.trim();
+  if (!text) return;
+  $("#chatErr").textContent = "";
+  history.push({ role: "user", content: text });
+  $("#chatInput").value = "";
+  addMsg("user", text);
+  streaming = true;
+  $("#sendBtn").disabled = $("#sendBtn2").disabled = true;
+
+  const bubble = addMsg("assistant", "…");
+  let acc = "", model = "", usage = null;
+  try {
+    const headers = { "Content-Type": "application/json" };
+    const prof = $("#profile").value;
+    if (prof && prof !== "default") headers["x-route-profile"] = prof;
+    const resp = await fetch("/v1/chat/completions", { method: "POST", headers, body: JSON.stringify(buildBody()) });
+    if (!resp.ok) { let t = ""; try { t = await resp.text(); } catch {} throw new Error(`HTTP ${resp.status}: ${t.slice(0,300)}`); }
+    if (!resp.body || !resp.body.getReader) {
+      const j = await resp.json();
+      acc = j.choices?.[0]?.message?.content || "";
+      model = j.model || "";
+      usage = j.usage || null;
+      bubble.textContent = acc || "(leere Antwort)";
+    } else {
+      const reader = resp.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const block = buf.slice(0, idx); buf = buf.slice(idx + 2);
+          for (const line of block.split("\n")) {
+            if (!line.startsWith("data:")) continue;
+            const data = line.slice(5).trim();
+            if (!data || data === "[DONE]") continue;
+            let ev; try { ev = JSON.parse(data); } catch { continue; }
+            if (ev.model) model = ev.model;
+            if (ev.usage) usage = ev.usage;
+            const delta = ev.choices?.[0]?.delta?.content;
+            if (delta) { acc += delta; bubble.textContent = acc; bubble.scrollTop = bubble.scrollHeight; }
+          }
+        }
+      }
+      bubble.textContent = acc || "(leere Antwort)";
+    }
+    const meta = [`modell: ${model || "auto"}`];
+    if (usage) meta.push(`${fmtNum(usage.completion_tokens)} tok · ${fmtCost(usage.cost)}`);
+    bubble.querySelector(".meta")?.remove();
+    const m = document.createElement("span"); m.className = "meta"; m.textContent = meta.join(" · "); bubble.appendChild(m);
+    history.push({ role: "assistant", content: acc });
+    fetchExplainTrace();
+  } catch (e) {
+    bubble.textContent = "⚠ Fehler: " + e.message;
+    history.pop();
+    $("#chatErr").textContent = e.message;
+  } finally {
+    streaming = false;
+    $("#sendBtn").disabled = $("#sendBtn2").disabled = false;
+  }
+}
+
+/* Routing-Trace der aktuellen Konversation (nur letzte User-Nachricht) */
+async function fetchExplainTrace() {
+  try {
+    const msgs = [];
+    const sys = $("#sysprompt").value.trim();
+    if (sys) msgs.push({ role: "system", content: sys });
+    for (const h of history.slice(-2)) msgs.push(h);
+    const headers = {};
+    const prof = $("#profile").value;
+    if (prof && prof !== "default") headers["x-route-profile"] = prof;
+    const d = await api("/v1/explain", { method: "POST", headers, body: JSON.stringify({ model: $("#model").value.trim() || "auto", messages: msgs, max_tokens: 200 }) });
+    const ranked = (d.trace?.ranked || []).slice(0, 5);
+    const rejected = (d.trace?.rejected || []).slice(0, 8);
+    let html = `<b>${esc(d.profile)}</b> → <b style="color:var(--accent)">${esc(d.winner)}</b> <span class="badge">${esc(d.winner_backend)}</span>\n`;
+    html += `<div class="detail-grid">
+      <span><span class="lbl">Kandidaten:</span> ${d.trace?.total_candidates ?? "—"}</span>
+      <span><span class="lbl">Gewichtung:</span> ${Object.entries(d.weights||{}).map(([k,v])=>`${k} ${(v*100).toFixed(0)}%`).join(" · ")}</span>
+    </div>`;
+    if (ranked.length) {
+      html += "<h4 style='margin-top:10px'>Ranking</h4><table><tr><th>Modell</th><th class='num'>Score</th><th class='num'>Kosten</th><th class='num'>Lat.</th><th class='num'>Ctx</th><th class='num'>Präf.</th><th class='num'>Qual.</th></tr>";
+      for (const r of ranked) html += `<tr><td>${esc(r.model_id)}</td><td class='num'>${r.score.toFixed(3)}</td><td class='num'>${fmtUsd(r.expected_cost_usd)}</td><td class='num'>${r.used_p95_ms}</td><td class='num'>${r.context_score.toFixed(2)}</td><td class='num'>${r.preference_score.toFixed(2)}</td><td class='num'>${r.quality_score.toFixed(2)}</td></tr>`;
+      html += "</table>";
+    }
+    if (rejected.length) {
+      html += `<h4 style='margin-top:10px'>Verworfen (${d.trace.rejected.length})</h4><ul style="font-size:12px">`;
+      for (const r of rejected) html += `<li>${esc(r.model_id)} — <span style="color:var(--warn)">${esc(r.reason)}</span></li>`;
+      html += "</ul>";
+    }
+    $("#traceContent").innerHTML = html;
+    $("#traceBox").style.display = "block";
+  } catch {}
+}
+$("#sendBtn").onclick = doSend;
+$("#sendBtn2").onclick = doSend;
+$("#chatInput").onkeydown = e => { if (e.key === "Enter") doSend(); };
+$("#temp").oninput = () => $("#tempOut").textContent = $("#temp").value;
+
+/* ---------- Explain ---------- */
+$("#explainBtn").onclick = async () => {
+  $("#explainErr").textContent = "";
+  const out = $("#explainResult");
+  out.innerHTML = '<div class="loading">Analysiere…</div>';
+  try {
+    const headers = { "Content-Type": "application/json" };
+    const prof = $("#explainProfile").value;
+    if (prof && prof !== "default") headers["x-route-profile"] = prof;
+    let body; try { body = JSON.parse($("#explainBody").value); } catch (e) { throw new Error("Ungültiges JSON: " + e.message); }
+    const d = await api("/v1/explain", { method: "POST", headers, body: JSON.stringify(body) });
+    const ranked = d.trace?.ranked || [];
+    const rejected = d.trace?.rejected || [];
+    let html = `<div class="detail-grid">
+      <span><span class="lbl">Profil:</span> ${esc(d.profile)}</span>
+      <span><span class="lbl">Winner:</span> <b style="color:var(--accent)">${esc(d.winner)}</b> <span class="badge">${esc(d.winner_backend)}</span></span>
+      <span><span class="lbl">Kandidaten gesamt:</span> ${d.trace?.total_candidates ?? "—"}</span>
+      <span><span class="lbl">Prompts (geschätzt):</span> ${fmtNum(d.request?.prompt_tokens_est)}</span>
+      <span><span class="lbl">Gewichtung:</span> ${Object.entries(d.weights||{}).map(([k,v])=>`${k} ${(v*100).toFixed(0)}%`).join(" · ")}</span>
+      <span><span class="lbl">Caps benötigt:</span> ${(d.request?.required_caps||[]).join(", ") || "—"} · ${(d.request?.required_modalities||[]).join(", ") || "—"}</span>
+    </div>`;
+    if (ranked.length) {
+      html += "<h4 style='margin-top:12px'>Ranking</h4><table><tr><th>Modell</th><th class='num'>Score</th><th class='num'>Kosten $</th><th class='num'>Lat.</th><th class='num'>Ctx</th><th class='num'>Präf.</th><th class='num'>Qual.</th></tr>";
+      for (const r of ranked) html += `<tr><td>${esc(r.model_id)}</td><td class='num'>${r.score.toFixed(3)}</td><td class='num'>${fmtUsd(r.expected_cost_usd)}</td><td class='num'>${r.used_p95_ms}</td><td class='num'>${r.context_score.toFixed(2)}</td><td class='num'>${r.preference_score.toFixed(2)}</td><td class='num'>${r.quality_score.toFixed(2)}</td></tr>`;
+      html += "</table>";
+    }
+    if (rejected.length) {
+      html += `<h4 style='margin-top:12px'>Verworfen (${rejected.length})</h4><ul style="font-size:12px; max-height:200px; overflow:auto">`;
+      for (const r of rejected) html += `<li>${esc(r.model_id)} — <span style="color:var(--warn)">${esc(r.reason)}</span></li>`;
+      html += "</ul>";
+    }
+    out.innerHTML = html;
+  } catch (e) { out.innerHTML = ""; $("#explainErr").textContent = e.message; }
+};
+
+/* ---------- Usage ---------- */
+function renderKpis(el, t) {
+  el.innerHTML = `
+    <div class="kpi"><div class="v">${fmtNum(t?.count)}</div><div class="k">Aufrufe</div></div>
+    <div class="kpi"><div class="v">${fmtNum(t?.tokens_out)}</div><div class="k">Output-Tokens</div></div>
+    <div class="kpi"><div class="v">${(t?.tokens_per_sec ?? 0).toFixed(1)}</div><div class="k">tok/s</div></div>
+    <div class="kpi"><div class="v">${fmtCost(t?.cost_usd)}</div><div class="k">Kosten</div></div>`;
+}
+async function loadUsage() {
+  try {
+    const d = await api("/v1/transactions?limit=50");
+    renderKpis($("#kpiSession"), d.totals_session);
+    renderKpis($("#kpiToday"), d.totals_today_utc);
+    $("#txBody").innerHTML = (d.recent || []).map(t => `<tr>
+      <td>${new Date(t.unix_ts * 1000).toLocaleString("de-DE")}</td>
+      <td><span class="badge">${esc(t.api)}</span></td>
+      <td>${esc(t.profile)}</td>
+      <td>${esc(t.backend)}</td>
+      <td title="${esc(t.model_id)}">${esc(t.model_id)}</td>
+      <td class="num">${fmtMs(t.duration_ms)}</td>
+      <td class="num">${fmtNum(t.tokens_out)}</td>
+      <td class="num">${fmtCost(t.cost_usd)}</td>
+    </tr>`).join("") || `<tr><td colspan="8" class="hint">Noch keine Aufrufe in dieser Session.</td></tr>`;
+  } catch (e) { $("#txBody").innerHTML = `<tr><td colspan="8" class="error">${esc(e.message)}</td></tr>`; }
+}
+
+/* ---------- Logs (loguru-Stil) ---------- */
+const LOG_COLORS = { TRACE: "#8b949e", DEBUG: "#79c0ff", INFO: "#3fb950", WARNING: "#d29922", ERROR: "#f85149" };
+const LOG_RANK = { TRACE: 0, DEBUG: 1, INFO: 2, WARNING: 3, ERROR: 4 };
+let logsPaused = false;
+let lastLogKey = "";
+let logCache = [];
+
+function loguruTs(ms) {
+  const d = new Date(ms);
+  const p = (n, l = 2) => String(n).padStart(l, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+}
+function loguruLine(e) {
+  const lvl = e.level.padEnd(8);
+  const loc = `${e.target}${e.line ? ":" + e.line : ""}`;
+  const color = LOG_COLORS[e.level] || "#e6edf3";
+  return `<span style="color:#6e7681">${loguruTs(e.ts_ms)}</span> <span style="color:#6e7681">|</span> <span style="color:${color}; font-weight:${e.level === "ERROR" ? "700" : "500"}">${esc(lvl)}</span> <span style="color:#6e7681">|</span> <span style="color:#8b949e">${esc(loc)}</span> <span style="color:#6e7681">-</span> <span>${esc(e.message)}</span>`;
+}
+function loguruPlain(e) {
+  return `${loguruTs(e.ts_ms)} | ${e.level.padEnd(8)} | ${e.target}${e.line ? ":" + e.line : ""} - ${e.message}`;
+}
+function visibleLogs() {
+  const minRank = LOG_RANK[$("#logLevel").value];
+  const q = $("#logSearch").value.toLowerCase();
+  return logCache.filter(e =>
+    LOG_RANK[e.level] !== undefined && LOG_RANK[e.level] >= minRank &&
+    (!q || (e.message + " " + e.target + " " + e.level).toLowerCase().includes(q))
+  );
+}
+function renderLogs() {
+  const box = $("#logBox");
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  const filtered = visibleLogs();
+  box.innerHTML = filtered.length
+    ? filtered.map(loguruLine).join("\n")
+    : '<span style="color:#6e7681">(keine Einträge für diesen Filter)</span>';
+  $("#logCount").textContent = `${logCache.length} Einträge · ${filtered.length} gefiltert`;
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+async function refreshLogs() {
+  if (logsPaused) return;
+  try {
+    const d = await api("/v1/logs?limit=300");
+    const key = d.logs.length ? d.logs[0].ts_ms + ":" + d.logs[0].message.length : "0";
+    if (key === lastLogKey && logCache.length) return;
+    lastLogKey = key;
+    logCache = d.logs;
+    renderLogs();
+  } catch {}
+}
+$("#logLevel").onchange = renderLogs;
+$("#logSearch").oninput = renderLogs;
+$("#logPause").onclick = () => {
+  logsPaused = !logsPaused;
+  $("#logPause").textContent = logsPaused ? "▶ Weiter" : "⏸ Pause";
+  if (!logsPaused) refreshLogs();
+};
+$("#logClear").onclick = async () => {
+  try { await fetch("/v1/logs/clear", { method: "POST" }); } catch {}
+  logCache = []; lastLogKey = ""; renderLogs();
+};
+$("#logCopy").onclick = async () => {
+  const txt = visibleLogs().map(loguruPlain).join("\n");
+  try {
+    await navigator.clipboard.writeText(txt);
+    $("#logCopy").textContent = "✓ Kopiert";
+    setTimeout(() => $("#logCopy").textContent = "📋 Kopieren", 1500);
+  } catch {}
+};
+setInterval(() => { if ($("#tab-logs").classList.contains("active")) refreshLogs(); }, 1500);
+
+loadProfiles();
+loadModels();
+loadUsage();
+</script>
+</body>
+</html>

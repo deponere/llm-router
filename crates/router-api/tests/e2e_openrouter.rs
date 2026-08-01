@@ -52,6 +52,8 @@ async fn start_app(mock_url: String) -> (tokio::task::JoinHandle<()>, String) {
         registry: Arc::new(registry),
         tracker,
         history: router_api::history::TransactionHistory::new(),
+        rotator: Arc::new(router_api::rotate::Rotator::from_env()),
+        logs: router_api::logbuf::LogBuffer::new(100),
     };
     let app = router_api::routes::build(state);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();

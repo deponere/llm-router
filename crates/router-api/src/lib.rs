@@ -9,6 +9,9 @@ pub mod debug;
 pub mod history;
 pub mod error;
 pub mod routing;
+pub mod rotate;
+pub mod ui;
+pub mod logbuf;
 
 pub use error::ApiError;
 pub use state::AppState;

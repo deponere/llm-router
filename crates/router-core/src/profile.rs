@@ -93,7 +93,7 @@ mod tests {
         let cfg = Config::from_str(
             r#"
             [server]
-            bind = "127.0.0.1:4000"
+            bind = "127.0.0.1:4123"
             [backends.openrouter]
             kind = "openrouter"
             base_url = "https://x"

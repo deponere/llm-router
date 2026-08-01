@@ -12,6 +12,66 @@ use crate::openai::openai_to_norm;
 use crate::routing::{decide_for, headers_to_hints, parse_privacy_tag, resolve_auto_alias};
 use crate::state::AppState;
 
+/// `POST /v1/admin/restart` — startet den Router-Prozess neu: gleiches Binary,
+/// gleiche Args, neue Session (überlebt Terminal-Schließen). Die Antwort wird
+/// vor dem Exit zugestellt; Clients sollten anschließend `/healthz` pollen.
+/// Der neue Prozess übernimmt die Config (inkl. ggf. frisch rotiertem Key aus `.env`).
+pub async fn restart() -> Json<Value> {
+    let Some(exe) = std::env::current_exe().ok() else {
+        return Json(json!({ "status": "error", "error": "current_exe unknown" }));
+    };
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(std::env::args().skip(1));
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // Neue Session (setsid): der Neustart überlebt ein Terminal-Schließen.
+        cmd.process_group(0);
+    }
+    cmd.stdin(std::process::Stdio::null());
+    // stdout/stderr nur erben, wenn ein echtes Terminal dahinter hängt. Bei
+    // Pipe/Parent-Logging (z. B. launchd, Admin-App, diese Session) nach
+    // /dev/null — sonst blockieren Log-Writes im vollen Pipe-Puffer und der
+    // Runtime friert ein. Die Logs sind ohnehin im Web-UI (GET /v1/logs).
+    use std::io::IsTerminal;
+    if !std::io::stdout().is_terminal() {
+        cmd.stdout(std::process::Stdio::null());
+    }
+    if !std::io::stderr().is_terminal() {
+        cmd.stderr(std::process::Stdio::null());
+    }
+    match cmd.spawn() {
+        Ok(_) => {
+            // Antwort erst raus, dann Prozess beenden (Port wird dadurch frei;
+            // der neue Prozess retried das Binden, siehe main.rs).
+            tokio::spawn(async {
+                tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+                std::process::exit(0);
+            });
+            Json(json!({ "status": "restarting" }))
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "restart spawn failed");
+            Json(json!({ "status": "error", "error": e.to_string() }))
+        }
+    }
+}
+/// `GET /v1/logs` — letzte Log-Einträge aus dem In-Memory-Ringbuffer (Loguru-Stil), optional `?limit=N` (default 200).
+pub async fn logs(
+    State(state): State<AppState>,
+    axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Json<Value> {
+    let limit = q.get("limit").and_then(|s| s.parse::<usize>().ok()).unwrap_or(200);
+    let entries = state.logs.snapshot(limit);
+    Json(json!({ "total": entries.len(), "logs": entries }))
+}
+
+/// `POST /v1/logs/clear` — leert den Log-Ringbuffer.
+pub async fn logs_clear(State(state): State<AppState>) -> Json<Value> {
+    let cleared = state.logs.clear();
+    Json(json!({ "cleared": cleared }))
+}
+
 /// `GET /v1/transactions` — aktuelle Session-Summe + letzte Aufrufe fürs Widget, optional `?limit=N` (default 10).
 pub async fn transactions(
     State(state): State<AppState>,

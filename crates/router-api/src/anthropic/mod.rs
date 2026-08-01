@@ -24,6 +24,7 @@ pub async fn messages(
     Json(body): Json<Value>,
 ) -> Result<Response, ApiError> {
     let (profile_hdr, privacy_hdr) = headers_to_hints(&headers);
+    state.rotator.maybe_rotate().await;
     let mut norm = anthropic_to_norm(&body)?;
     if norm.profile_hint.is_none() {
         norm.profile_hint = profile_hdr.clone();

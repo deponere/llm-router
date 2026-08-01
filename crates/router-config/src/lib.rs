@@ -254,7 +254,7 @@ mod tests {
         let cfg = Config::from_str(
             r#"
             [server]
-            bind = "127.0.0.1:4000"
+            bind = "127.0.0.1:4123"
 
             [backends.openrouter]
             kind = "openrouter"
@@ -271,7 +271,7 @@ mod tests {
             "#,
         )
         .unwrap();
-        assert_eq!(cfg.server.bind, "127.0.0.1:4000");
+        assert_eq!(cfg.server.bind, "127.0.0.1:4123");
         assert!(cfg.backends.contains_key("openrouter"));
         assert_eq!(cfg.backends["openrouter"].kind, BackendKind::Openrouter);
         assert!(cfg.backends["omlx"].local);

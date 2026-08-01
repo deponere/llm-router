@@ -14,11 +14,16 @@ pub fn build(state: AppState) -> Router {
     let cors = CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any);
 
     Router::new()
+        .route("/", get(crate::ui::index))
+        .route("/ui", get(crate::ui::index))
         .route("/v1/models", get(crate::openai::list_models))
         .route("/v1/registry", get(crate::debug::registry))
         .route("/v1/intelligence", get(crate::debug::intelligence))
         .route("/v1/transactions", get(crate::debug::transactions))
+        .route("/v1/logs", get(crate::debug::logs))
+        .route("/v1/logs/clear", post(crate::debug::logs_clear))
         .route("/v1/explain", post(crate::debug::explain))
+        .route("/v1/admin/restart", post(crate::debug::restart))
         .route(
             "/v1/chat/completions",
             post(crate::openai::chat_completions),

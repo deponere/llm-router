@@ -201,7 +201,7 @@ mod tests {
     fn cfg() -> router_config::Config {
         r#"
         [server]
-        bind = "127.0.0.1:4000"
+        bind = "127.0.0.1:4123"
         [backends.omlx]
         kind = "openai_compat"
         base_url = "http://127.0.0.1:8000/v1"
