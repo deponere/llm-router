@@ -4,11 +4,28 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LLM Router · Web-Interface</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("router-theme")||"dark"}catch(e){document.documentElement.dataset.theme="dark"}</script>
 <style>
   :root {
     --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#2d333b;
     --text:#e6edf3; --dim:#8b949e; --accent:#3fb950; --accent2:#58a6ff;
-    --warn:#d29922; --err:#f85149; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --warn:#d29922; --err:#f85149; --log-bg:#0a0d12;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    color-scheme:dark;
+  }
+  [data-theme="light"] {
+    --bg:#ffffff; --panel:#f6f8fa; --panel2:#eaeef2; --border:#d1d9e0;
+    --text:#1f2328; --dim:#59636e; --accent:#1a7f37; --accent2:#0969da;
+    --warn:#9a6700; --err:#cf222e; --log-bg:#f6f8fa;
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme: light) {
+    [data-theme="system"] {
+      --bg:#ffffff; --panel:#f6f8fa; --panel2:#eaeef2; --border:#d1d9e0;
+      --text:#1f2328; --dim:#59636e; --accent:#1a7f37; --accent2:#0969da;
+      --warn:#9a6700; --err:#cf222e; --log-bg:#f6f8fa;
+      color-scheme:light;
+    }
   }
   * { box-sizing:border-box; margin:0; padding:0; }
   body { background:var(--bg); color:var(--text); font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
@@ -89,6 +106,11 @@
   <div class="status">
     <span><span id="dot" class="dot"></span> <span id="apiStatus">prüfe…</span></span>
     <span id="modelCount"></span>
+    <select id="themeSel" style="width:auto" title="Farbschema">
+      <option value="dark">🌙 Dunkel</option>
+      <option value="light">☀️ Hell</option>
+      <option value="system">🖥 System</option>
+    </select>
     <button class="ghost" id="restartBtn">🔄 Neu starten</button>
   </div>
 </header>
@@ -213,7 +235,7 @@
         <button class="ghost" id="logClear">🗑 Leeren</button>
         <button class="ghost" id="logCopy">📋 Kopieren</button>
       </div>
-      <div id="logBox" style="background:#0a0d12; border:1px solid var(--border); border-radius:8px; padding:12px 14px; overflow:auto; max-height:70vh; font-family:var(--mono); font-size:12px; line-height:1.7; white-space:pre-wrap"></div>
+      <div id="logBox" style="background:var(--log-bg); border:1px solid var(--border); border-radius:8px; padding:12px 14px; overflow:auto; max-height:70vh; font-family:var(--mono); font-size:12px; line-height:1.7; white-space:pre-wrap"></div>
       <div class="hint">Live-Polling (1,5 s) · In-Memory-Ringbuffer (letzte 500 Einträge) · Format wie loguru: <code>ts | LEVEL | target:line - message</code></div>
     </div>
   </section>
@@ -242,6 +264,22 @@ document.querySelectorAll("#nav button").forEach(b => b.onclick = () => {
   if (b.dataset.tab === "models") loadModels();
   if (b.dataset.tab === "usage") loadUsage();
   if (b.dataset.tab === "logs") refreshLogs();
+});
+
+/* ---------- Theme (dunkel / hell / system) ---------- */
+function effectiveTheme() {
+  const t = localStorage.getItem("router-theme") || "dark";
+  if (t === "system") return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  return t;
+}
+$("#themeSel").value = localStorage.getItem("router-theme") || "dark";
+$("#themeSel").onchange = () => {
+  localStorage.setItem("router-theme", $("#themeSel").value);
+  document.documentElement.dataset.theme = $("#themeSel").value;
+  renderLogs(); // Level-Farben der bereits gerenderten Zeilen anpassen
+};
+matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
+  if ($("#themeSel").value === "system") renderLogs();
 });
 
 /* ---------- Status ---------- */
@@ -533,7 +571,10 @@ async function loadUsage() {
 }
 
 /* ---------- Logs (loguru-Stil) ---------- */
-const LOG_COLORS = { TRACE: "#8b949e", DEBUG: "#79c0ff", INFO: "#3fb950", WARNING: "#d29922", ERROR: "#f85149" };
+const LOG_PALETTES = {
+  dark:  { TRACE: "#8b949e", DEBUG: "#79c0ff", INFO: "#3fb950", WARNING: "#d29922", ERROR: "#f85149" },
+  light: { TRACE: "#59636e", DEBUG: "#0969da", INFO: "#1a7f37", WARNING: "#9a6700", ERROR: "#cf222e" },
+};
 const LOG_RANK = { TRACE: 0, DEBUG: 1, INFO: 2, WARNING: 3, ERROR: 4 };
 let logsPaused = false;
 let lastLogKey = "";
@@ -547,8 +588,9 @@ function loguruTs(ms) {
 function loguruLine(e) {
   const lvl = e.level.padEnd(8);
   const loc = `${e.target}${e.line ? ":" + e.line : ""}`;
-  const color = LOG_COLORS[e.level] || "#e6edf3";
-  return `<span style="color:#6e7681">${loguruTs(e.ts_ms)}</span> <span style="color:#6e7681">|</span> <span style="color:${color}; font-weight:${e.level === "ERROR" ? "700" : "500"}">${esc(lvl)}</span> <span style="color:#6e7681">|</span> <span style="color:#8b949e">${esc(loc)}</span> <span style="color:#6e7681">-</span> <span>${esc(e.message)}</span>`;
+  const color = LOG_PALETTES[effectiveTheme()][e.level] || "var(--text)";
+  const dim = "var(--dim)";
+  return `<span style="color:${dim}">${loguruTs(e.ts_ms)}</span> <span style="color:${dim}">|</span> <span style="color:${color}; font-weight:${e.level === "ERROR" ? "700" : "500"}">${esc(lvl)}</span> <span style="color:${dim}">|</span> <span style="color:${dim}">${esc(loc)}</span> <span style="color:${dim}">-</span> <span>${esc(e.message)}</span>`;
 }
 function loguruPlain(e) {
   return `${loguruTs(e.ts_ms)} | ${e.level.padEnd(8)} | ${e.target}${e.line ? ":" + e.line : ""} - ${e.message}`;
@@ -567,7 +609,7 @@ function renderLogs() {
   const filtered = visibleLogs();
   box.innerHTML = filtered.length
     ? filtered.map(loguruLine).join("\n")
-    : '<span style="color:#6e7681">(keine Einträge für diesen Filter)</span>';
+    : '<span style="color:var(--dim)">(keine Einträge für diesen Filter)</span>';
   $("#logCount").textContent = `${logCache.length} Einträge · ${filtered.length} gefiltert`;
   if (atBottom) box.scrollTop = box.scrollHeight;
 }
