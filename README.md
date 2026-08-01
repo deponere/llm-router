@@ -433,4 +433,4 @@ Every successful completion records the time-to-first-token. The `LatencyTracker
 
 Released under the [MIT License](./LICENSE).
 
-Copyright © 2026 Alex.
+Copyright © 2026 Markus & Alex.
