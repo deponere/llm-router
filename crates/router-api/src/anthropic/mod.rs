@@ -21,11 +21,17 @@ use crate::state::AppState;
 pub async fn messages(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(body): Json<Value>,
+    Json(mut body): Json<Value>,
 ) -> Result<Response, ApiError> {
     let (profile_hint, privacy_hint) = headers_to_hints(&headers);
     let key_name = crate::auth::lookup_key(&headers, &state.config);
     state.rotator.run_housekeeping(&state).await;
+    // DLP-Guard: Secrets redaktieren, BEVOR norm gebaut wird — `anthropic_to_norm` kopiert
+    // den Text in `norm.messages`, aus dem `norm_to_openai` den Upstream-Body rekonstruiert.
+    let redacted = crate::secret_scan::redact_json(&mut body);
+    if redacted > 0 {
+        tracing::warn!(redacted, "redacted secrets from prompt before routing");
+    }
     let mut norm = anthropic_to_norm(&body)?;
     if norm.profile_hint.is_none() {
         norm.profile_hint = profile_hint.clone();
@@ -39,11 +45,6 @@ pub async fn messages(
     // Body und `<profile>/auto`-Suffix.
     if let Some(pin) = crate::auth::forced_profile(&headers, &state.config)? {
         norm.profile_hint = Some(pin);
-    }
-    // DLP-Guard: Secret im Prompt → Routing auf lokale Backends erzwingen.
-    if let Some(secret) = crate::secret_scan::find_secret(&body.to_string()) {
-        tracing::warn!(secret, "secret detected in prompt — forcing local-only routing");
-        norm.privacy_tag = router_core::PrivacyTag::LocalOnly;
     }
 
     let snap = state
