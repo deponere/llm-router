@@ -41,6 +41,7 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 sha2 = "0.10"
 toml_edit = "0.22"
 dotenvy = "0.15"
+regex = "1"
 
 [profile.release]
 lto = "thin"

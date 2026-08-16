@@ -31,6 +31,7 @@ parking_lot = { workspace = true }
 rusqlite = { workspace = true }
 sha2 = { workspace = true }
 toml_edit = { workspace = true }
+regex = { workspace = true }
 
 [dev-dependencies]
 wiremock = "0.6"
