@@ -137,6 +137,7 @@ mod tests {
             privacy_class: PrivacyClass::Zdr,
             measured_p95_ms: p95,
             intelligence_index: None,
+            blocked_windows: vec![],
         }
     }
 

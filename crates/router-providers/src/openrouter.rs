@@ -288,6 +288,7 @@ impl OpenRouterClient {
             privacy_class,
             measured_p95_ms: None,
             intelligence_index: None,
+            blocked_windows: vec![],
             id: m.id,
         }
     }

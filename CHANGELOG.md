@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- **Secret-Guard (DLP)** — erkennt Secrets im Prompt (API-Token-Prefixe wie `sk-`, `ghp_`, `AKIA`, `AIza`, `xoxb-`, `github_pat_`, … sowie PEM-Private-Keys inkl. SPIFFE-SVID-Key) und erzwingt dann `LocalOnly`-Routing: das Secret verlässt die Maschine nie, weil nur noch lokale Backends in Frage kommen; kein lokaler Kandidat → Request schlägt fehl. Dependency-frei (prefix-`contains`, kein gitleaks/trufflehog-Entropy-Scan).
+- **Key→Profil-Pinning** — `[auth.keys]` kennt jetzt optional `profile = "…"`: der Server erzwingt dieses Profil für jeden Request unter dem Key und ignoriert `x-route-profile`/`route_profile`/`<profile>/auto` vollständig. Ein Key auf ein Profil mit `backend_allowlist = ["omlx"]` kann damit technisch keine Cloud-Backends erreichen. Fehlt das gepinnte Profil in der Config, schlägt der Request fehl (fail-closed, kein stiller Fallback auf `default`). `router-admin auth add … --profile <name>`.
 - **Docker-Deployment** — `Dockerfile` (Multi-Stage, rusqlite bundled, non-root, Healthcheck) + `docker-compose.yml` (Port 4123, `./config`-Volume, `env_file: .env`); Key-Rotation im Container über `OPENROUTER_MGMT_KEY` statt macOS-Keychain; oMLX via `host.docker.internal` erreichbar
 - **Ollama im Compose-Setup** — zweiter Service (`ollama/ollama`), `config/router.docker.toml` aktiviert das Ollama-Backend (Linux-tauglich, `local`-Profil → ollama), Modell-Pull + Warmup im Entrypoint, `OLLAMA_KEEP_ALIVE=-1`; NVIDIA-GPU-Passthrough auskommentiert enthalten
 - **UI: Emojis entfernt** — Navigation, Buttons, Theme-/Sprach-Selector und Logs-Aktionen sind emoji-frei („Chat", „Restart", „Dark/Light/System", „Delete", …)

@@ -359,7 +359,7 @@ A LightLLM-style single-file web UI, embedded in the router (no build step, no e
 - **Logs** — live view of the router's in-memory log buffer (last 500 entries, polled every 1.5 s), rendered loguru-style: `ts | LEVEL | target:line - message` with level colors, level filter, search, pause, clear and copy-as-text.
 - **Usage** — session/today KPIs plus a persistent cost history (SQLite): daily cost chart (7/30/90 days) and breakdowns by backend / profile / model / API key.
 - **Benchmark** — in the Explain tab: „Benchmark top 3" runs real parallel calls against the top-ranked candidates and compares TTFT, total latency, tokens and cost.
-- **Settings** — edit API keys + budgets, storage and alert settings in the browser (comment-preserving writes, save → auto-restart), plus `router-admin auth add|list|rm` and `alerts test` on the CLI.
+- **Settings** — edit API keys + budgets, storage and alert settings in the browser (comment-preserving writes, save → auto-restart), plus `router-admin auth add|list|rm` and `alerts test` on the CLI. A key can be **pinned to a profile** (`profile = "…"` / `--profile <name>`): the server then forces that profile on every request under the key and ignores `x-route-profile`/`route_profile`/`<profile>/auto` — pin a key to a `backend_allowlist`-restricted profile (e.g. `["omlx"]`) and it cannot reach cloud backends.
 - **Theme** — dark / light / system switcher in the header (persisted in `localStorage`, no flash on load; `system` follows the OS appearance, including the log level colors).
 - **Language** — English (default), Deutsch, Español, Français — switchable in the header and persisted; number/date formatting follows the locale, default field values (system prompt, explain sample) translate too.
 - **Restart** — `🔄 Neu starten` in the header calls `POST /v1/admin/restart` and reloads once the router is back.
@@ -457,6 +457,8 @@ A Cargo workspace ([layout above](#workspace-layout)) plus a Swift package under
 ### What's changed since 0.1.0
 
 - **Arbitrary backends** via a `Provider` trait — `openai_compat` and native `anthropic` upstreams alongside OpenRouter.
+- **Secret-Guard (DLP)** — secrets detected in a prompt (API-token prefixes, PEM private keys incl. SPIFFE-SVID keys) force local-only routing, so the secret never leaves the machine.
+- **Key→profile pinning** — a router API key can be pinned to a profile the server enforces on every request (ignores `x-route-profile`/`route_profile`/`<profile>/auto`).
 - **Quality scoring** — Artificial Analysis Intelligence Index as a fifth score term (`weights.quality`) + `min_intelligence_index` hard filter.
 - **Fallback cascade** — on an upstream 4xx/5xx the router walks down the ranked candidates instead of returning the error.
 - **macOS admin app** + `router-admin` comment-preserving config bridge.

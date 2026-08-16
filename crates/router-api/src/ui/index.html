@@ -153,6 +153,11 @@
           <h3 data-i18n="chat.settings">Settings</h3>
           <label data-i18n="chat.profile">Route profile</label>
           <select id="profile"><option value="">default</option></select>
+          <label data-i18n="chat.mode">Route mode</label>
+          <select id="mode">
+            <option value="">Normal</option>
+            <option value="judge">Judge</option>
+          </select>
           <label data-i18n="chat.model">Model (empty = auto)</label>
           <input type="text" id="model" placeholder="auto">
           <label data-i18n="chat.system">System prompt</label>
@@ -261,6 +266,16 @@
       <input type="text" id="cfgDbPath">
       <label data-i18n="settings.retentionDays">Retention (days, 0 = keep all)</label>
       <input type="number" id="cfgRetention" min="0" step="7">
+    </div>
+    <div class="card">
+      <h3 data-i18n="settings.profiles">Route profiles</h3>
+      <div class="hint" data-i18n="settings.profilesHint">Weights are the score terms; lists are comma-separated model/backend patterns. Effective after save &amp; restart.</div>
+      <div id="profilesPane"><span class="loading" data-i18n="usage.loading">Loading…</span></div>
+    </div>
+    <div class="card">
+      <h3 data-i18n="settings.backends">Backends</h3>
+      <div class="hint" data-i18n="settings.backendsHint">Blocked windows (UTC): comma-separated "HH:MM-HH:MM". Prefix "w:" = weekdays, "we:" = weekend, none = every day.</div>
+      <div id="backendsPane"><span class="loading" data-i18n="usage.loading">Loading…</span></div>
     </div>
     <div class="card">
       <h3 data-i18n="settings.alerts">Alerts</h3>
@@ -373,11 +388,12 @@ en: {
   "status.checking": "checking…", "status.online": "online", "status.offline": "offline",
   "lang.title": "Language",
   "theme.title": "Color scheme", "theme.dark": "Dark", "theme.light": "Light", "theme.system": "System",
-  "chat.settings": "Settings", "chat.profile": "Route profile", "chat.model": "Model (empty = auto)", "chat.system": "System prompt",
+  "chat.settings": "Settings", "chat.profile": "Route profile", "chat.mode": "Route mode", "chat.model": "Model (empty = auto)", "chat.system": "System prompt",
   "chat.sysDefault": "You are a helpful assistant.", "chat.temperature": "Temperature", "chat.maxTokens": "Max tokens (empty = model default)",
   "chat.send": "Send", "chat.conversation": "Conversation", "chat.placeholder": "Type a message…",
+  "chat.metaModel": "model:", "chat.metaJudge": "judge:",
   "chat.hint": "Ask a question — the router picks the best model via the expert system.", "chat.traceShow": "Show routing trace",
-  "chat.error": "Error", "chat.emptyReply": "(empty reply)", "chat.metaModel": "model:",
+  "chat.error": "Error", "chat.emptyReply": "(empty reply)",
   "trace.candidates": "Candidates:", "trace.weights": "Weights:", "trace.ranking": "Ranking", "trace.rejected": "Rejected",
   "trace.colModel": "Model", "trace.colScore": "Score", "trace.colCost": "Cost", "trace.colLat": "Lat.", "trace.colCtx": "Ctx", "trace.colPref": "Pref.", "trace.colQual": "Qual.",
   "models.title": "Model catalog", "models.search": "Filter (ID / backend / provider)…",
@@ -422,7 +438,11 @@ en: {
   "settings.rotationFailed": "Rotation failed", "settings.rotationSucceeded": "Rotation ok",
   "settings.backendDown": "Backend down", "settings.balanceLow": "Balance low", "settings.costThresholdEvent": "Cost threshold",
   "settings.save": "Save & restart", "settings.testAlert": "Test alert", "settings.saved": "Saved — restarting…",
-  "settings.alertSent": "Test alert triggered."
+  "settings.alertSent": "Test alert triggered.",
+  "settings.profiles": "Route profiles", "settings.profilesHint": "Weights are the score terms; lists are comma-separated model/backend patterns. Effective after save & restart.",
+  "settings.profPreferences": "Preferences (models)", "settings.profBackends": "Backend allowlist", "settings.profDenylist": "Model denylist", "settings.noProfiles": "No profiles defined.",
+  "settings.backends": "Backends", "settings.backendsHint": "Blocked windows (UTC): comma-separated \"HH:MM-HH:MM\". Prefix \"w:\" = weekdays, \"we:\" = weekend, none = every day.",
+  "settings.bkEnabled": "enabled", "settings.noBackends": "No backends defined."
 },
 de: {
   "app.title": "LLM Router · Web-Interface",
@@ -430,11 +450,12 @@ de: {
   "status.checking": "prüfe…", "status.online": "online", "status.offline": "offline",
   "lang.title": "Sprache",
   "theme.title": "Farbschema", "theme.dark": "Dunkel", "theme.light": "Hell", "theme.system": "System",
-  "chat.settings": "Einstellungen", "chat.profile": "Route-Profil", "chat.model": "Modell (leer = auto)", "chat.system": "System-Prompt",
+  "chat.settings": "Einstellungen", "chat.profile": "Route-Profil", "chat.mode": "Route-Modus", "chat.model": "Modell (leer = auto)", "chat.system": "System-Prompt",
   "chat.sysDefault": "Du bist ein hilfreicher Assistent.", "chat.temperature": "Temperature", "chat.maxTokens": "Max Tokens (leer = Modell-Default)",
   "chat.send": "Senden", "chat.conversation": "Konversation", "chat.placeholder": "Nachricht eingeben…",
+  "chat.metaModel": "Modell:", "chat.metaJudge": "Judge:",
   "chat.hint": "Stelle eine Frage — der Router wählt das beste Modell über das Expertensystem.", "chat.traceShow": "Routing-Trace anzeigen",
-  "chat.error": "Fehler", "chat.emptyReply": "(leere Antwort)", "chat.metaModel": "modell:",
+  "chat.error": "Fehler", "chat.emptyReply": "(leere Antwort)",
   "trace.candidates": "Kandidaten:", "trace.weights": "Gewichtung:", "trace.ranking": "Ranking", "trace.rejected": "Verworfen",
   "trace.colModel": "Modell", "trace.colScore": "Score", "trace.colCost": "Kosten", "trace.colLat": "Lat.", "trace.colCtx": "Ctx", "trace.colPref": "Präf.", "trace.colQual": "Qual.",
   "models.title": "Modell-Katalog", "models.search": "Filtern (ID / Backend / Provider)…",
@@ -480,7 +501,11 @@ de: {
   "settings.rotationFailed": "Rotation fehlgeschlagen", "settings.rotationSucceeded": "Rotation ok",
   "settings.backendDown": "Backend down", "settings.balanceLow": "Balance niedrig", "settings.costThresholdEvent": "Kosten-Schwelle",
   "settings.save": "Speichern & neu starten", "settings.testAlert": "Test-Alert", "settings.saved": "Gespeichert — Neustart…",
-  "settings.alertSent": "Test-Alert ausgelöst."
+  "settings.alertSent": "Test-Alert ausgelöst.",
+  "settings.profiles": "Route-Profile", "settings.profilesHint": "Gewichte = Score-Terme; Listen = kommagetrennte Modell-/Backend-Muster. Wirksam nach Speichern & Neustart.",
+  "settings.profPreferences": "Preferences (Modelle)", "settings.profBackends": "Backend-Allowlist", "settings.profDenylist": "Modell-Denylist", "settings.noProfiles": "Keine Profile definiert.",
+  "settings.backends": "Backends", "settings.backendsHint": "Sperrfenster (UTC): kommagetrennt \"HH:MM-HH:MM\". Präfix \"w:\" = Wochentage, \"we:\" = Wochenende, ohne = jeden Tag.",
+  "settings.bkEnabled": "aktiv", "settings.noBackends": "Keine Backends definiert."
 },
 es: {
   "app.title": "LLM Router · Interfaz web",
@@ -813,9 +838,12 @@ async function doSend() {
     const headers = { "Content-Type": "application/json" };
     const prof = $("#profile").value;
     if (prof && prof !== "default") headers["x-route-profile"] = prof;
+    const mode = $("#mode").value;
+    if (mode) headers["x-route-mode"] = mode;
     const resp = await fetch("/v1/chat/completions", { method: "POST", headers, body: JSON.stringify(buildBody()) });
     if (!resp.ok) { let t = ""; try { t = await resp.text(); } catch {} throw new Error(`HTTP ${resp.status}: ${t.slice(0,300)}`); }
-    if (!resp.body || !resp.body.getReader) {
+    const isJson = (resp.headers.get("content-type") || "").includes("application/json");
+    if (!resp.body || !resp.body.getReader || isJson) {
       const j = await resp.json();
       acc = j.choices?.[0]?.message?.content || "";
       model = j.model || "";
@@ -846,8 +874,11 @@ async function doSend() {
       }
       bubble.textContent = acc || t("chat.emptyReply");
     }
+    const jWinner = resp.headers.get("x-judge-winner");
+    const jMembers = resp.headers.get("x-judge-members");
     const meta = [`${t("chat.metaModel")} ${model || "auto"}`];
     if (usage) meta.push(`${fmtNum(usage.completion_tokens)} tok · ${fmtCost(usage.cost)}`);
+    if (jWinner) meta.push(`${t("chat.metaJudge")} ${jWinner}${jMembers ? " (aus " + jMembers + ")" : ""}`);
     bubble.querySelector(".meta")?.remove();
     const m = document.createElement("span"); m.className = "meta"; m.textContent = meta.join(" · "); bubble.appendChild(m);
     history.push({ role: "assistant", content: acc });
@@ -1179,10 +1210,46 @@ async function loadSettings() {
         $("#authHint").textContent = t("settings.restartHint");
       } catch (e) { $("#cfgErr").textContent = e.message; }
     });
+    renderProfiles(cfg.profiles || {});
+    renderBackends(cfg.backends || {});
     $("#authHint").textContent = "";
   } catch (e) {
     $("#keyBody").innerHTML = `<tr><td colspan="5" class="error">${esc(e.message)}</td></tr>`;
   }
+}
+
+function renderBackends(backends) {
+  const fmtWin = w => {
+    const d = w.days === "weekdays" ? "w:" : w.days === "weekend" ? "we:" : "";
+    return d + (w.start || "") + "-" + (w.end || "");
+  };
+  const rows = Object.keys(backends).sort().map(id => {
+    const b = backends[id];
+    const wins = (b.blocked_windows || []).map(fmtWin).join(", ");
+    return `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px">
+      <label style="width:110px; font-family:var(--mono); font-size:12px">${esc(id)}</label>
+      <label style="margin:0; white-space:nowrap"><input type="checkbox" data-bk="${esc(id)}" data-be="enabled" ${b.enabled ? "checked" : ""}> ${t("settings.bkEnabled")}</label>
+      <input type="text" data-bk="${esc(id)}" data-be="windows" value="${esc(wins)}" placeholder="w:07:00-09:00, we:22:00-06:00" style="flex:1">
+    </div>`;
+  }).join("");
+  $("#backendsPane").innerHTML = rows || `<span class="hint">${t("settings.noBackends")}</span>`;
+}
+
+function renderProfiles(profiles) {
+  const names = Object.keys(profiles).sort((a, b) => a === "default" ? -1 : b === "default" ? 1 : a.localeCompare(b));
+  const row = (name, p) => {
+    const w = p.weights || {};
+    const num = (k, v) => `<label style="width:86px">${k}<input type="number" step="0.05" min="0" data-pf="${esc(name)}" data-w="${k}" value="${v ?? 0}"></label>`;
+    const list = (k, lbl) => `<label>${lbl}</label><input type="text" data-pf="${esc(name)}" data-list="${k}" value="${esc((p[k] || []).join(", "))}" placeholder="a, b, c">`;
+    return `<details style="margin-bottom:8px">
+      <summary style="cursor:pointer; font-weight:600">${esc(name)}</summary>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0">${["cost","latency","context","preference","quality"].map(k => num(k, w[k])).join("")}</div>
+      ${list("preferences", t("settings.profPreferences"))}
+      ${list("backend_allowlist", t("settings.profBackends"))}
+      ${list("model_denylist", t("settings.profDenylist"))}
+    </details>`;
+  };
+  $("#profilesPane").innerHTML = names.map(n => row(n, profiles[n])).join("") || `<span class="hint">${t("settings.noProfiles")}</span>`;
 }
 $("#newKeyBtn").onclick = async () => {
   const name = $("#newKeyName").value.trim();
@@ -1219,6 +1286,48 @@ $("#saveCfgBtn").onclick = async () => {
     "alerts.events.balance_low": $("#evBalanceLow").checked,
     "alerts.events.daily_cost_threshold": $("#evCostThreshold").checked,
   };
+  const profSets = {};
+  document.querySelectorAll("[data-pf]").forEach(el => {
+    const name = el.dataset.pf;
+    (profSets[name] ||= {});
+    if (el.dataset.w) {
+      (profSets[name].weights ||= {});
+      profSets[name].weights[el.dataset.w] = parseFloat(el.value) || 0;
+    } else if (el.dataset.list) {
+      profSets[name][el.dataset.list] = el.value.split(",").map(s => s.trim()).filter(Boolean);
+    }
+  });
+  for (const name of Object.keys(profSets)) {
+    const ps = profSets[name];
+    if (ps.weights) {
+      const w = ps.weights;
+      set[`profiles.${name}.weights`] = `{ cost = ${w.cost}, latency = ${w.latency}, context = ${w.context}, preference = ${w.preference}, quality = ${w.quality} }`;
+    }
+    for (const k of ["preferences", "backend_allowlist", "model_denylist"])
+      if (ps[k]) set[`profiles.${name}.${k}`] = JSON.stringify(ps[k]);
+  }
+  const parseWin = s => {
+    let days = "every", t = s.trim();
+    if (t.startsWith("w:")) { days = "weekdays"; t = t.slice(2); }
+    else if (t.startsWith("we:")) { days = "weekend"; t = t.slice(3); }
+    const [start, end] = t.split("-");
+    const daysPart = days === "every" ? "" : `, days = "${days}"`;
+    return `{ start = "${(start || "").trim()}", end = "${(end || "").trim()}"${daysPart} }`;
+  };
+  const bk = {};
+  document.querySelectorAll("[data-bk]").forEach(el => {
+    const id = el.dataset.bk;
+    (bk[id] ||= {});
+    if (el.dataset.be === "enabled") bk[id].enabled = el.checked;
+    else bk[id].windows = el.value;
+  });
+  for (const id of Object.keys(bk)) {
+    if ("enabled" in bk[id]) set[`backends.${id}.enabled`] = bk[id].enabled;
+    if (bk[id].windows !== undefined) {
+      const wins = bk[id].windows.split(",").map(parseWin).filter(s => s.includes("start"));
+      set[`backends.${id}.blocked_windows`] = "[" + wins.join(", ") + "]";
+    }
+  }
   const btn = $("#saveCfgBtn");
   btn.disabled = true;
   try {

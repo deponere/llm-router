@@ -149,6 +149,15 @@ pub async fn admin_keys_remove(
 /// `GET /v1/admin/config` — relevante Einstellungs-Sektionen für den Settings-Tab.
 pub async fn admin_config_get(State(state): State<AppState>) -> Json<Value> {
     let c = &state.config;
+    let mut backends = serde_json::Map::new();
+    for (id, b) in &c.backends {
+        backends.insert(id.clone(), json!({
+            "enabled": b.enabled,
+            "kind": b.kind,
+            "local": b.local,
+            "blocked_windows": b.blocked_windows,
+        }));
+    }
     Json(json!({
         "auth": {
             "enabled": c.auth.enabled,
@@ -171,6 +180,8 @@ pub async fn admin_config_get(State(state): State<AppState>) -> Json<Value> {
                 "daily_cost_threshold": c.alerts.events.daily_cost_threshold,
             },
         },
+        "profiles": serde_json::to_value(&c.profiles).unwrap_or_else(|_| json!({})),
+        "backends": Value::Object(backends),
     }))
 }
 

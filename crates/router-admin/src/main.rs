@@ -38,8 +38,8 @@ fn auth_cmd(args: &[String]) -> Result<()> {
             for k in &cfg.auth.keys {
                 let prefix: String = k.hash.chars().take(16).collect();
                 println!(
-                    "  {}  {}…  daily={:?} monthly={:?}",
-                    k.name, prefix, k.daily_budget_usd, k.monthly_budget_usd
+                    "  {}  {}…  daily={:?} monthly={:?} profile={:?}",
+                    k.name, prefix, k.daily_budget_usd, k.monthly_budget_usd, k.profile
                 );
             }
             if cfg.auth.keys.is_empty() {
@@ -52,9 +52,10 @@ fn auth_cmd(args: &[String]) -> Result<()> {
                 .get(2)
                 .map(String::as_str)
                 .filter(|s| !s.is_empty())
-                .context("usage: router-admin auth add <path> <name> [--daily X] [--monthly Y]")?;
+                .context("usage: router-admin auth add <path> <name> [--daily X] [--monthly Y] [--profile P]")?;
             let mut daily = None;
             let mut monthly = None;
+            let mut profile = None;
             let mut i = 3;
             while i < args.len() {
                 match args[i].as_str() {
@@ -66,6 +67,10 @@ fn auth_cmd(args: &[String]) -> Result<()> {
                         monthly = Some(args.get(i + 1).context("--monthly braucht einen Wert")?.parse::<f64>()?);
                         i += 2;
                     }
+                    "--profile" => {
+                        profile = Some(args.get(i + 1).context("--profile braucht einen Wert")?.clone());
+                        i += 2;
+                    }
                     other => bail!("unbekanntes Argument '{other}'"),
                 }
             }
@@ -73,7 +78,7 @@ fn auth_cmd(args: &[String]) -> Result<()> {
             let existing = std::fs::read_to_string(&path)
                 .with_context(|| format!("reading {path}"))?;
             let mut doc: DocumentMut = existing.parse().context("TOML malformed")?;
-            add_auth_key(&mut doc, name, &hash, daily, monthly)?;
+            add_auth_key(&mut doc, name, &hash, daily, monthly, profile.as_deref())?;
             std::fs::write(format!("{path}.bak"), &existing)?;
             std::fs::write(&path, doc.to_string())?;
             println!("Key '{name}' angelegt (auth.enabled = true gesetzt).");
@@ -146,7 +151,7 @@ fn generate_key() -> (String, String) {
     (plain, format!("sha256:{hex}"))
 }
 
-fn add_auth_key(doc: &mut DocumentMut, name: &str, hash: &str, daily: Option<f64>, monthly: Option<f64>) -> Result<()> {
+fn add_auth_key(doc: &mut DocumentMut, name: &str, hash: &str, daily: Option<f64>, monthly: Option<f64>, profile: Option<&str>) -> Result<()> {
     if !doc.contains_key("auth") {
         doc.insert("auth", Item::Table(Table::new()));
     }
@@ -173,6 +178,9 @@ fn add_auth_key(doc: &mut DocumentMut, name: &str, hash: &str, daily: Option<f64
     }
     if let Some(m) = monthly {
         t.insert("monthly_budget_usd", Item::Value(Value::from(m)));
+    }
+    if let Some(p) = profile {
+        t.insert("profile", Item::Value(Value::from(p)));
     }
     keys.push(t);
     Ok(())

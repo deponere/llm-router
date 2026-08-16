@@ -35,6 +35,16 @@ pub async fn messages(
     }
     norm.detect_required();
     resolve_auto_alias(&mut norm, &state.config);
+    // Key→Profil-Pinning: das server-erzwungene Profil des Keys gewinnt über Header,
+    // Body und `<profile>/auto`-Suffix.
+    if let Some(pin) = crate::auth::forced_profile(&headers, &state.config)? {
+        norm.profile_hint = Some(pin);
+    }
+    // DLP-Guard: Secret im Prompt → Routing auf lokale Backends erzwingen.
+    if let Some(secret) = crate::secret_scan::find_secret(&body.to_string()) {
+        tracing::warn!(secret, "secret detected in prompt — forcing local-only routing");
+        norm.privacy_tag = router_core::PrivacyTag::LocalOnly;
+    }
 
     let snap = state
         .registry
@@ -43,6 +53,18 @@ pub async fn messages(
         .map_err(|e| ApiError::Upstream(e.to_string()))?;
     let (profile, decision) = decide_for(&norm, &state.config, &snap)?;
     announce_decision("anthropic", &profile, &decision, &norm);
+
+    // Judge-Modus gibt es nur am OpenAI-Endpoint (Antwortformat ist OpenAI-kompatibel).
+    if headers
+        .get("x-route-mode")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.eq_ignore_ascii_case("judge"))
+        .unwrap_or(false)
+    {
+        return Err(ApiError::BadRequest(
+            "judge mode: nur über /v1/chat/completions (OpenAI-Format)".into(),
+        ));
+    }
 
     let started = Instant::now();
 

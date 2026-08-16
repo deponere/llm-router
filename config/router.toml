@@ -43,7 +43,7 @@ auth = { type = "none" }
 local = true
 
 [backends.ollama]
-enabled = false
+enabled = true
 kind = "openai_compat"
 base_url = "http://localhost:11434/v1"
 auth = { type = "none" }
@@ -226,5 +226,20 @@ weights = { cost = 0, latency = 0.5, context = 0.2, preference = 0.3, quality = 
 backend_allowlist = ["omlx"]
 preferences = ["qwen3-32b", "llama-3.3-70b", "qwen2.5-coder-32b"]
 
+[profiles.ollama]
+weights = { cost = 0, latency = 0.5, context = 0.2, preference = 0.3, quality = 0 }
+backend_allowlist = ["ollama"]
+preferences = ["qwen2.5:0.5b", "llama3.2", "qwen3"]
+
 [auth]
 enabled = false
+# API-Keys schützen die LLM-Endpoints (x-api-key / Bearer). Nur SHA-256-Hashes!
+# Keys per `router-admin auth add <path> <name> [--daily X] [--monthly Y] [--profile P]`.
+# [[auth.keys]]
+# name = "agent-local"
+# hash = "sha256:…"
+# daily_budget_usd = 2.0
+# monthly_budget_usd = 30.0
+# profile = "local"        # Key→Profil-Pinning: Server erzwingt dieses Profil,
+#                          # ignoriert x-route-profile/route_profile/<profile>/auto.
+#                          # Pin auf ein Profil mit backend_allowlist=["omlx"] = kein Cloud-Zugriff.

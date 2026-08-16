@@ -30,6 +30,8 @@ pub struct RegistryHandle {
     aa: ArtificialAnalysisClient,
     /// backend_id → Unix-Sekunde des letzten Catalog-Fetch-Fehlers (für Alerts).
     last_fetch_failure: Arc<std::sync::Mutex<std::collections::HashMap<String, u64>>>,
+    /// backend_id → Zeitfenster-Sperren (aus der Backend-Config).
+    blocked_windows: BTreeMap<String, Vec<router_config::TimeWindow>>,
 }
 
 const CACHE_KEY: &str = "registry";
@@ -41,6 +43,12 @@ impl RegistryHandle {
             .iter()
             .filter(|(_, c)| c.enabled)
             .filter_map(|(id, c)| build_provider(id, c).map(|p| (id.clone(), p)))
+            .collect();
+        let blocked_windows: BTreeMap<String, Vec<router_config::TimeWindow>> = config
+            .backends
+            .iter()
+            .filter(|(_, c)| !c.blocked_windows.is_empty())
+            .map(|(id, c)| (id.clone(), c.blocked_windows.clone()))
             .collect();
         let cache = Cache::builder()
             .max_capacity(1)
@@ -54,6 +62,7 @@ impl RegistryHandle {
             tracker,
             aa,
             last_fetch_failure: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+            blocked_windows,
         }
     }
 
@@ -105,6 +114,12 @@ impl RegistryHandle {
                         .unwrap_or(0);
                     self.last_fetch_failure.lock().unwrap().insert(id.clone(), ts);
                 }
+            }
+        }
+        // Zeitfenster-Sperren aus der Backend-Config auf die Kandidaten stempeln.
+        for m in &mut models {
+            if let Some(w) = self.blocked_windows.get(&m.backend_id) {
+                m.blocked_windows = w.clone();
             }
         }
         Ok(Registry { models })

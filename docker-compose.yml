@@ -1,18 +1,18 @@
 # LLM Router — docker compose
 # Start:  docker compose up -d --build
 # Logs:   docker compose logs -f router
-# Stop:   docker compose down        (Modelle/Historie bleiben im Volume)
+# Stop:   docker compose down        (Historie bleibt in ./config)
 #
-# Volumes: ./config → /config (router.toml + SQLite-Historie persistent),
-#          ollama-data → Ollama-Modelle
-# Config:  der Container nutzt config/router.docker.toml (Ollama aktiv,
-#          bind 0.0.0.0, lokales Profil → ollama). Eigene Host-Config:
+# Volumes: ./config → /config (router.toml + SQLite-Historie persistent)
+# Config:  der Container nutzt config/router.docker.toml (Ollama nativ auf dem
+#          Host via host.docker.internal:11434, bind 0.0.0.0, lokales Profil → ollama).
+#          Eigene Host-Config:
 #          ROUTER_CONFIG=/config/router.toml + ROUTER_BIND=0.0.0.0:4123 setzen.
 # Secrets: .env (OPENROUTER_API_KEY, DEEPSEEK_API_KEY, …) — nie in die Config
 # oMLX:    macOS-only; vom Container via host.docker.internal:8008 erreichbar
+# Ollama:  läuft NATIV auf dem Host (brew services start ollama) — im Container
+#          gibt es auf macOS keinen GPU-Zugriff (CPU-only → extrem langsam).
 # Rotation: im Container statt Keychain: OPENROUTER_MGMT_KEY env (siehe README)
-# GPU (Linux/NVIDIA): unter ollama die deploy/resources-Zeilen einkommentieren;
-#                     Apple Silicon/OrbStack: GPU-Passthrough nicht nötig
 services:
   router:
     build: .
@@ -27,9 +27,6 @@ services:
       RUST_LOG: info,router_api=debug,router_core=debug,router_providers=debug
     volumes:
       - ./config:/config
-    depends_on:
-      ollama:
-        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:4123/healthz"]
@@ -37,40 +34,3 @@ services:
       timeout: 3s
       retries: 3
       start_period: 15s
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: llm-ollama
-    # Beim Start geladene Modelle (kommagetrennt); später:
-    # docker compose exec ollama ollama pull <modell>
-    environment:
-      OLLAMA_MODELS: qwen2.5:0.5b
-      # Modelle dauerhaft geladen lassen (sonst: ~15-90s Load pro Kaltstart,
-      # gerade auf CPU-only wie OrbStack/Apple Silicon)
-      OLLAMA_KEEP_ALIVE: -1
-    # Host-Zugriff (ollama-CLI vom Rechner) — einkommentieren, wenn gewünscht;
-    # kollidiert mit nativ installiertem Ollama (Port 11434):
-    # ports:
-    #   - "11434:11434"
-    # GPU-Passthrough (Linux mit NVIDIA-Container-Toolkit) — einkommentieren:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
-    entrypoint: ["/bin/sh", "/scripts/ollama-entrypoint.sh"]
-    volumes:
-      - ./scripts/docker:/scripts:ro
-      - ollama-data:/root/.ollama
-    healthcheck:
-      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    restart: unless-stopped
-
-volumes:
-  ollama-data:

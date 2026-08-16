@@ -156,6 +156,7 @@ impl OpenAiCompatClient {
             privacy_class: if self.is_local { PrivacyClass::Local } else { PrivacyClass::Standard },
             measured_p95_ms: None,
             intelligence_index: None,
+            blocked_windows: vec![],
             id: m.id,
         }
     }
@@ -199,6 +200,7 @@ mod tests {
                 app_title: None,
                 anthropic_version: None,
                 watchdog: None,
+                blocked_windows: vec![],
             },
         )
     }

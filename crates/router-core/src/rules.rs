@@ -3,6 +3,8 @@
 use crate::norm::{NormRequest, PrivacyTag};
 use crate::profile::ResolvedProfile;
 use crate::registry::{ModelCandidate, PrivacyClass};
+use router_config::{Days, TimeWindow};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Reserve für die Completion, wenn der Client `max_tokens` nicht setzt.
 pub const DEFAULT_COMPLETION_RESERVE: u32 = 1024;
@@ -24,6 +26,7 @@ pub enum FilterReason {
     ProviderOnlyMismatch,
     ProviderIgnored,
     IntelligenceTooLow { got: Option<f64>, cap: f64 },
+    TimeBlocked,
 }
 
 /// `true`, wenn der Kandidat alle Hard-Filter überlebt.
@@ -69,6 +72,11 @@ pub fn passes_all(
     }
     if profile.model_denylist.iter().any(|p| glob_match(p, &cand.id)) {
         return Err(FilterReason::ModelDenied);
+    }
+
+    // 4b. Zeitfenster-Sperre (UTC) aus der Backend-Config.
+    if time_blocked(&cand.blocked_windows, TimeNow::now()) {
+        return Err(FilterReason::TimeBlocked);
     }
 
     // 5. Provider-only / provider-ignore (für OpenRouter-Modelle).
@@ -160,6 +168,68 @@ fn glob_bytes(pat: &[u8], txt: &[u8]) -> bool {
     }
 }
 
+/// Aktuelle UTC-Zeit als Minuten-seit-Mitternacht + Wochentag (0=Sonntag).
+#[derive(Debug, Clone, Copy)]
+pub struct TimeNow {
+    pub minutes: u16,
+    pub weekday: u8,
+}
+
+impl TimeNow {
+    pub fn now() -> Self {
+        let secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let days = secs / 86_400;
+        let day_secs = secs % 86_400;
+        Self {
+            minutes: (day_secs / 60) as u16,
+            // Unix-Epoche (1970-01-01) war ein Donnerstag.
+            weekday: ((days + 4) % 7) as u8,
+        }
+    }
+}
+
+/// `true`, wenn `now` in einem der Sperrfenster liegt (Wrap-around über Mitternacht unterstützt).
+pub fn time_blocked(windows: &[TimeWindow], now: TimeNow) -> bool {
+    windows.iter().any(|w| {
+        if !days_match(w.days, now.weekday) {
+            return false;
+        }
+        let (Ok(start), Ok(end)) = (hhmm(&w.start), hhmm(&w.end)) else {
+            return false;
+        };
+        if start == end {
+            return false; // leeres Fenster sperrt nichts
+        }
+        let cur = now.minutes as i32;
+        if start < end {
+            cur >= start && cur < end
+        } else {
+            cur >= start || cur < end
+        }
+    })
+}
+
+fn days_match(d: Days, weekday: u8) -> bool {
+    match d {
+        Days::Every => true,
+        Days::Weekdays => (1..=5).contains(&weekday), // Montag..Freitag
+        Days::Weekend => weekday == 0 || weekday == 6,
+    }
+}
+
+fn hhmm(s: &str) -> Result<i32, ()> {
+    let (h, m) = s.split_once(':').ok_or(())?;
+    let h: i32 = h.parse().map_err(|_| ())?;
+    let m: i32 = m.parse().map_err(|_| ())?;
+    if !(0..24).contains(&h) || !(0..60).contains(&m) {
+        return Err(());
+    }
+    Ok(h * 60 + m)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,6 +251,7 @@ mod tests {
             privacy_class: PrivacyClass::Zdr,
             measured_p95_ms: None,
             intelligence_index: None,
+            blocked_windows: vec![],
         }
     }
 
@@ -282,5 +353,36 @@ mod tests {
             passes_all(&req, &p, &cand),
             Err(FilterReason::ModelDenied)
         ));
+    }
+
+    fn win(start: &str, end: &str, days: Days) -> TimeWindow {
+        TimeWindow { start: start.into(), end: end.into(), days }
+    }
+
+    #[test]
+    fn time_window_blocking() {
+        // Jeden Tag 07:00–09:00.
+        let every = vec![win("07:00", "09:00", Days::Every)];
+        assert!(time_blocked(&every, TimeNow { minutes: 8 * 60, weekday: 3 }));
+        assert!(!time_blocked(&every, TimeNow { minutes: 10 * 60, weekday: 3 }));
+
+        // Wrap-around über Mitternacht: 22:00–06:00.
+        let wrap = vec![win("22:00", "06:00", Days::Every)];
+        assert!(time_blocked(&wrap, TimeNow { minutes: 23 * 60, weekday: 3 }));
+        assert!(time_blocked(&wrap, TimeNow { minutes: 3 * 60, weekday: 3 }));
+        assert!(!time_blocked(&wrap, TimeNow { minutes: 12 * 60, weekday: 3 }));
+
+        // Weekdays: Montag blockiert, Samstag nicht.
+        let wd = vec![win("00:00", "23:59", Days::Weekdays)];
+        assert!(time_blocked(&wd, TimeNow { minutes: 12 * 60, weekday: 1 }));
+        assert!(!time_blocked(&wd, TimeNow { minutes: 12 * 60, weekday: 6 }));
+
+        // Weekend: Sonntag blockiert, Dienstag nicht.
+        let we = vec![win("00:00", "23:59", Days::Weekend)];
+        assert!(time_blocked(&we, TimeNow { minutes: 12 * 60, weekday: 0 }));
+        assert!(!time_blocked(&we, TimeNow { minutes: 12 * 60, weekday: 2 }));
+
+        // Leeres Fenster sperrt nichts.
+        assert!(!time_blocked(&[win("09:00", "09:00", Days::Every)], TimeNow { minutes: 9 * 60, weekday: 3 }));
     }
 }

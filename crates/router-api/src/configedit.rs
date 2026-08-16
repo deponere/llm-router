@@ -99,6 +99,12 @@ impl ConfigEditor {
 }
 
 fn parse_value(s: &str) -> Result<Value, String> {
+    // TOML-Array (`["a", "b"]`) oder Inline-Table (`{ cost = 0.15 }`) — für
+    // preferences/allowlists/weights aus dem Settings-Tab.
+    let t = s.trim_start();
+    if t.starts_with('[') || t.starts_with('{') {
+        return s.parse::<Value>().map_err(|e| e.to_string());
+    }
     if let Ok(b) = s.parse::<bool>() {
         return Ok(Value::from(b));
     }
@@ -148,5 +154,30 @@ mod tests {
         let s = doc.to_string();
         assert!(s.contains("webhook_url = \"https://example.com/hook\""));
         assert!(s.contains("daily_cost_threshold_usd = 5"));
+    }
+
+    #[test]
+    fn set_array_and_inline_table_values() {
+        let mut doc: DocumentMut = "[profiles.default]\npreferences = [\"a\"]\n".parse().unwrap();
+        // Liste ersetzen (komplette weights-Zeile als Inline-Table).
+        ConfigEditor::set(&mut doc, "profiles.default.preferences", "[\"x\", \"y\"]").unwrap();
+        ConfigEditor::set(
+            &mut doc,
+            "profiles.default.weights",
+            "{ cost = 0.15, latency = 0.1 }",
+        )
+        .unwrap();
+        let s = doc.to_string();
+        assert!(s.contains("preferences = [\"x\", \"y\"]"));
+        assert!(s.contains("weights = { cost = 0.15, latency = 0.1 }"));
+        // Leeres Array ist erlaubt (Allowlist leeren).
+        ConfigEditor::set(&mut doc, "profiles.default.backend_allowlist", "[]").unwrap();
+        assert!(doc.to_string().contains("backend_allowlist = []"));
+    }
+
+    #[test]
+    fn set_rejects_garbage_toml() {
+        let mut doc: DocumentMut = "[profiles.default]\n".parse().unwrap();
+        assert!(ConfigEditor::set(&mut doc, "profiles.default.preferences", "[unclosed").is_err());
     }
 }

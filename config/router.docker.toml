@@ -31,11 +31,12 @@ auth = { type = "none" }
 local = true
 
 [backends.ollama]
-enabled = true           # Compose-Service "ollama" im selben Netzwerk
+enabled = true           # nativer Host-Ollama (brew services start ollama)
 kind = "openai_compat"
-base_url = "http://ollama:11434/v1"
+base_url = "http://host.docker.internal:11434/v1"
 auth = { type = "none" }
 local = true
+blocked_windows = []
 
 [backends.lmstudio]
 enabled = false
@@ -140,21 +141,28 @@ ttl_seconds = 86400
 
 [profiles.default]
 weights = { cost = 0.15, latency = 0.1, context = 0.1, preference = 0.55, quality = 0.1 }
-preferences = ["deepseek/deepseek-v4-pro"]
+preferences = ["deepseek/deepseek-v4-pro", "qwen2.5:0.5b", "llama3.2", "qwen3"]
 model_denylist = ["*:free"]
 provider_require_parameters = false
+backend_allowlist = []
 
 [profiles.cheap]
 weights = { cost = 0.9, latency = 0.05, context = 0.05, preference = 0, quality = 0 }
 max_price_out_per_mtok = 2.0
 provider_sort = "price"
 provider_require_parameters = true
+backend_allowlist = []
+model_denylist = []
+preferences = []
 
 [profiles.fast]
 weights = { cost = 0.1, latency = 0.7, context = 0.1, preference = 0.1, quality = 0 }
 max_latency_p95_ms = 1500
 provider_sort = "latency"
 provider_require_parameters = true
+backend_allowlist = []
+model_denylist = []
+preferences = []
 
 [profiles.private]
 weights = { cost = 0.2, latency = 0.2, context = 0.2, preference = 0.4, quality = 0 }
@@ -163,16 +171,40 @@ provider_zdr = true
 provider_allow_fallbacks = false
 provider_data_collection = "deny"
 provider_require_parameters = true
+backend_allowlist = []
+model_denylist = []
+preferences = []
 
 [profiles.smart]
 weights = { cost = 0, latency = 0.1, context = 0.2, preference = 0.2, quality = 0.5 }
-preferences = ["anthropic/claude-opus-4-7", "anthropic/claude-opus-4-6", "openai/gpt-5", "google/gemini-2.5-pro"]
+preferences = ["anthropic/claude-opus-4-7","anthropic/claude-opus-4-6","openai/gpt-5","google/gemini-2.5-pro"]
 provider_require_parameters = true
+backend_allowlist = []
+model_denylist = []
 
 [profiles.local]
 weights = { cost = 0, latency = 0.5, context = 0.2, preference = 0.3, quality = 0 }
-backend_allowlist = ["ollama"]
-preferences = ["qwen2.5:0.5b", "llama3.2", "qwen3"]
+backend_allowlist = ["ollama","omlx"]
+preferences = ["qwen2.5:0.5b","llama3.2","qwen3"]
+model_denylist = []
 
 [auth]
 enabled = false
+allow_ui = true
+
+[alerts]
+daily_cost_threshold_usd = 0
+telegram_chat_id = ""
+telegram_token_env = ""
+webhook_url = ""
+
+[alerts.events]
+backend_down = true
+balance_low = true
+daily_cost_threshold = true
+rotation_failed = true
+rotation_succeeded = false
+
+[storage]
+db_path = "data/router.sqlite"
+retention_days = 90

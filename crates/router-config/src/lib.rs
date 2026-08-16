@@ -72,6 +72,13 @@ pub struct AuthKey {
     /// USD-Budget pro UTC-Monat (optional).
     #[serde(default)]
     pub monthly_budget_usd: Option<f64>,
+    /// Server-erzwungenes Profil: wenn gesetzt, wird JEDER Request unter diesem Key
+    /// auf dieses Profil gezwungen — `x-route-profile`-Header, `route_profile`-Body
+    /// und `<profile>/auto`-Model-Suffix werden ignoriert. `None` = Client wählt frei.
+    /// Ein Pin auf ein Profil mit `backend_allowlist` (z. B. nur `omlx`) verhindert so
+    /// technisch, dass ein fehlerhafter/kompromittierter Agent Cloud-Backends erreicht.
+    #[serde(default)]
+    pub profile: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -169,6 +176,30 @@ pub struct BackendConfig {
     /// Optionaler Balance-Watchdog (z. B. DeepSeek: GET /user/balance). 
     #[serde(default)]
     pub watchdog: Option<WatchdogConfig>,
+    /// Zeitfenster (UTC), in denen dieses Backend NICHT genutzt werden darf.
+    #[serde(default)]
+    pub blocked_windows: Vec<TimeWindow>,
+}
+
+/// Zeitfenster-Sperre: Backend wird in diesen Zeiten nicht geroutet.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TimeWindow {
+    /// Startzeit UTC als `HH:MM`.
+    pub start: String,
+    /// Endzeit UTC als `HH:MM` (exklusiv); `start > end` = über Mitternacht.
+    pub end: String,
+    /// Welche Tage gelten. Default: jeden Tag.
+    #[serde(default)]
+    pub days: Days,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Days {
+    #[default]
+    Every,
+    Weekdays,
+    Weekend,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -15,6 +15,7 @@ pub mod history;
 pub mod logbuf;
 pub mod routing;
 pub mod rotate;
+pub mod secret_scan;
 pub mod store;
 pub mod ui;
 

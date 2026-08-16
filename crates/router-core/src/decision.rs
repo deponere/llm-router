@@ -61,6 +61,17 @@ pub fn decide(
     let mut survivors: Vec<ScoredCandidate> = Vec::new();
 
     for cand in registry.iter() {
+        // Batch-only-Modelle (OpenRouter-Suffix ":batch") können prinzipbedingt
+        // nie per Chat-Completion antworten — global raus, sonst 404 im Fallback
+        // UND im Judge-Fan-out.
+        if cand.id.ends_with(":batch") {
+            rejected.push(RejectedEntry {
+                backend: cand.backend_id.clone(),
+                model_id: cand.id.clone(),
+                reason: "batch_only (nicht für Chat verfügbar)".into(),
+            });
+            continue;
+        }
         match passes_all(req, profile, cand) {
             Ok(()) => {
                 survivors.push(score_candidate(req, profile, cand));
@@ -95,10 +106,15 @@ pub fn decide(
         ranked: accepted,
     };
 
-    tracing::debug!(
+    let w = trace.ranked.first();
+    tracing::info!(
         profile = %trace.profile,
         total = trace.total_candidates,
+        rejected = trace.rejected.len(),
         winner = %winner.id,
+        backend = %w.map(|e| e.backend.as_str()).unwrap_or(""),
+        cost_usd = w.map(|e| e.expected_cost_usd).unwrap_or(0.0),
+        p95_ms = w.map(|e| e.used_p95_ms).unwrap_or(0),
         "router decision"
     );
 
@@ -158,6 +174,7 @@ fn format_reason(r: &FilterReason) -> String {
             Some(v) => format!("intelligence_too_low ({v:.1} < {cap:.1})"),
             None => format!("intelligence_unknown (cap {cap:.1})"),
         },
+        FilterReason::TimeBlocked => "time_blocked (Backend-Zeitfenster)".into(),
     }
 }
 
@@ -188,6 +205,7 @@ mod tests {
             },
             measured_p95_ms: None,
             intelligence_index: None,
+            blocked_windows: vec![],
         }
     }
 
@@ -243,5 +261,23 @@ mod tests {
         };
         let res = decide(&req, &cheap_profile(), &registry);
         assert!(matches!(res, Err(DecisionError::NoCandidate { .. })));
+    }
+
+    #[test]
+    fn batch_only_models_are_rejected_globally() {
+        let req = NormRequest::default();
+        let registry = Registry {
+            models: vec![
+                cand("openrouter", "a/chat", 200_000, 1.0),
+                cand("openrouter", "anthropic/claude-opus-5:batch", 200_000, 1.0),
+            ],
+        };
+        let d = decide(&req, &cheap_profile(), &registry).unwrap();
+        assert_eq!(d.winner.id, "a/chat");
+        assert!(d
+            .trace
+            .rejected
+            .iter()
+            .any(|r| r.model_id == "anthropic/claude-opus-5:batch" && r.reason.contains("batch_only")));
     }
 }

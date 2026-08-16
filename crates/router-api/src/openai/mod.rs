@@ -75,6 +75,17 @@ pub async fn chat_completions(
     }
     norm.detect_required();
     resolve_auto_alias(&mut norm, &state.config);
+    // Key→Profil-Pinning: das server-erzwungene Profil des Keys gewinnt über Header,
+    // Body und `<profile>/auto`-Suffix (ein fehlerhafter Agent kann nicht ausbrechen).
+    if let Some(pin) = crate::auth::forced_profile(&headers, &state.config)? {
+        norm.profile_hint = Some(pin);
+    }
+    // DLP-Guard: Secret im Prompt → Routing auf lokale Backends erzwingen (Secret verlässt
+    // die Maschine nie; kein lokaler Kandidat verfügbar → Request schlägt fehl).
+    if let Some(secret) = crate::secret_scan::find_secret(&body.to_string()) {
+        tracing::warn!(secret, "secret detected in prompt — forcing local-only routing");
+        norm.privacy_tag = router_core::PrivacyTag::LocalOnly;
+    }
 
     let snap = state
         .registry
@@ -83,6 +94,55 @@ pub async fn chat_completions(
         .map_err(|e| ApiError::Upstream(e.to_string()))?;
     let (profile, decision) = decide_for(&norm, &state.config, &snap)?;
     announce_decision("openai", &profile, &decision, &norm);
+
+    // Judge-Modus: x-route-mode: judge → top-N parallel, Judge-LLM wählt die beste Antwort.
+    let judge_mode = headers
+        .get("x-route-mode")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.eq_ignore_ascii_case("judge"))
+        .unwrap_or(false);
+    if judge_mode {
+        let started = Instant::now();
+        let outcome = crate::routing::run_judge(&state, &profile, decision, body).await?;
+        let elapsed = started.elapsed();
+        let members: Vec<String> = outcome.members.iter().map(|(m, _)| m.clone()).collect();
+        tracing::info!(
+            mode = "judge",
+            judge = %outcome.judge_model,
+            members = %members.join(", "),
+            chosen = %outcome.chosen.id,
+            elapsed_ms = elapsed.as_millis() as u64,
+            "judge verdict"
+        );
+        state
+            .tracker
+            .record(&outcome.chosen.backend_id, &outcome.chosen.id, elapsed);
+        let cost = outcome.chosen_acc.cost;
+        announce_completion("openai", &outcome.chosen.id, elapsed, cost);
+        let tx = crate::history::Transaction {
+            unix_ts: now_unix(),
+            api: "openai".into(),
+            profile: profile.name.clone(),
+            backend: outcome.chosen.backend_id.clone(),
+            model_id: outcome.chosen.id.clone(),
+            duration_ms: elapsed.as_millis() as u64,
+            cost_usd: cost,
+            tokens_out: outcome.chosen_acc.completion_tokens.unwrap_or(0),
+        };
+        state.history.record(tx.clone());
+        let _ = state
+            .store
+            .insert(&tx, key_name.as_deref(), outcome.chosen_acc.prompt_tokens.unwrap_or(0), None);
+        let aggregated = aggregate_openai_sse(&outcome.chosen_acc, &outcome.chosen.id);
+        let mut resp = Json(aggregated).into_response();
+        if let Ok(v) = outcome.chosen.id.parse() {
+            resp.headers_mut().insert("x-judge-winner", v);
+        }
+        if let Ok(v) = members.join(",").parse() {
+            resp.headers_mut().insert("x-judge-members", v);
+        }
+        return Ok(resp);
+    }
 
     dispatch_openai(state, profile, decision, norm, body, key_name).await
 }
@@ -287,7 +347,7 @@ pub(crate) struct ToolAccum {
 }
 
 /// Das komplette Ergebnis eines abgesammelten OpenAI-Chat-Completion-Streams.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct Accumulated {
     pub content: String,
     pub tool_calls: Vec<ToolAccum>,

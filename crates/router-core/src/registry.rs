@@ -142,6 +142,8 @@ pub struct ModelCandidate {
     pub measured_p95_ms: Option<u32>,
     /// Artificial-Analysis-Intelligence-Index (0..100), wenn verfügbar.
     pub intelligence_index: Option<f64>,
+    /// Zeitfenster (UTC), in denen das Backend dieses Kandidaten gesperrt ist.
+    pub blocked_windows: Vec<router_config::TimeWindow>,
 }
 
 /// Snapshot der gemergten Registry, in der Lauf-Instanz via `router-providers::RegistryHandle` geliefert.

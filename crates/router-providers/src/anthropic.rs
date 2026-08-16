@@ -109,6 +109,7 @@ impl AnthropicClient {
             privacy_class: PrivacyClass::Standard,
             measured_p95_ms: None,
             intelligence_index: None,
+            blocked_windows: vec![],
             id,
         }
     }
