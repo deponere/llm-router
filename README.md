@@ -457,7 +457,7 @@ A Cargo workspace ([layout above](#workspace-layout)) plus a Swift package under
 ### What's changed since 0.1.0
 
 - **Arbitrary backends** via a `Provider` trait — `openai_compat` and native `anthropic` upstreams alongside OpenRouter.
-- **Secret-Guard (DLP)** — secrets detected in a prompt (API-token prefixes, PEM private keys incl. SPIFFE-SVID keys, credit cards via Luhn, IBAN via mod-97, and unknown high-entropy tokens) are replaced with `[REDACTED]` before the request is forwarded — the secret never leaves the machine and the prompt still completes.
+- **Secret-Guard (DLP)** — secrets and PII detected in a prompt (API-token prefixes, PEM private keys incl. SPIFFE-SVID keys, credit cards via Luhn, IBAN via mod-97, emails, phone numbers, and unknown high-entropy tokens) are replaced with `[REDACTED]` before the request is forwarded — the sensitive data never leaves the machine and the prompt still completes.
 - **Key→profile pinning** — a router API key can be pinned to a profile the server enforces on every request (ignores `x-route-profile`/`route_profile`/`<profile>/auto`).
 - **Quality scoring** — Artificial Analysis Intelligence Index as a fifth score term (`weights.quality`) + `min_intelligence_index` hard filter.
 - **Fallback cascade** — on an upstream 4xx/5xx the router walks down the ranked candidates instead of returning the error.

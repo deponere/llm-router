@@ -1,9 +1,10 @@
-//! DLP-Guard: erkennt und REDAKTIERT Secrets in Prompt-Inhalten, bevor der Router sie an
-//! Backends schickt. Vier Ebenen (Vault-Radar-inspiriert):
+//! DLP-Guard: erkennt und REDAKTIERT Secrets UND PII in Prompt-Inhalten, bevor der Router
+//! sie an Backends schickt. Ebenen (Vault-Radar-inspiriert):
 //! 1. PEM-Private-Keys (inkl. SPIFFE-SVID-Key), 2. bekannte Token-Prefixe,
-//! 3. strukturierte Formate (Kreditkarten/Luhn, IBAN/mod-97), 4. Shannon-Entropy-Scan.
-//! Erkannte Secrets werden durch `[REDACTED]` ersetzt — der Prompt läuft dadurch weiter,
-//! statt blockiert zu werden. Es wird NUR das Label gezählt, nie der Secret-Wert geloggt.
+//! 3. strukturierte Formate (Kreditkarten/Luhn, IBAN/mod-97) + PII (E-Mail, Telefonnummer),
+//! 4. Shannon-Entropy-Scan.
+//! Erkannte Treffer werden durch `[REDACTED]` ersetzt — der Prompt läuft dadurch weiter,
+//! statt blockiert zu werden. Es wird NUR die Anzahl geloggt, nie der Wert.
 
 use std::sync::LazyLock;
 
@@ -34,6 +35,13 @@ pub fn redact_text(text: &str) -> (String, usize) {
         if is_iban(m.as_str()) {
             spans.push((m.start(), m.end()));
         }
+    }
+    // 3b. PII: E-Mail + Telefonnummer — einweg-maskiert wie Secrets.
+    for m in EMAIL_RE.find_iter(text) {
+        spans.push((m.start(), m.end()));
+    }
+    for m in PHONE_RE.find_iter(text) {
+        spans.push((m.start(), m.end()));
     }
     // 4. Entropy-Scan für unbekannte Formate.
     entropy_spans(text, &mut spans);
@@ -117,6 +125,16 @@ static TOKEN_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// Kreditkarte: 13–19 Ziffern (mit optionalen Leer-/Bindestrichen), Luhn-validiert.
 static CC_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\b\d[\d \-]{12,21}\d\b").expect("cc regex"));
+
+/// E-Mail-Adresse (verlangt TLD mit ≥ 2 Buchstaben).
+static EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b").expect("email regex")
+});
+
+/// Telefonnummer (E.164 oder mit gängigen Trennern), führendes `+`.
+static PHONE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\+\d[\d\s().-]{6,14}\d").expect("phone regex")
+});
 
 fn is_luhn(s: &str) -> bool {
     let digits: Vec<u8> = s.bytes().filter(|b| b.is_ascii_digit()).collect();
@@ -247,6 +265,17 @@ mod tests {
         let (out2, n2) = redact_text("Karte 4111 1111 1111 1112, IBAN DE88 3704 0044 0532 0130 00");
         assert_eq!(n2, 0);
         assert!(out2.contains("4111"));
+    }
+
+    #[test]
+    fn redacts_emails_and_phones() {
+        let (out, n) = redact_text("Kontakt: user.name+tag@example.com oder +49 176 12345678");
+        assert_eq!(n, 2);
+        assert!(!out.contains('@') && !out.contains("+49"));
+        assert!(out.contains("[REDACTED]"));
+        // Zu kurz / kein TLD → bleiben stehen.
+        let (_, n2) = redact_text("Summe +123 und foo@bar");
+        assert_eq!(n2, 0);
     }
 
     #[test]
